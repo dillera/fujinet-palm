@@ -1,0 +1,24 @@
+#include "FujiNetTestRsc.h"
+
+VERSION ID 1 "0.1"
+
+ICONFAMILYEX
+BEGIN
+    BITMAP "icon.bmp" BPP 1
+END
+
+FORM ID MainForm AT (0 0 160 160)
+NOFRAME
+USABLE
+BEGIN
+    TITLE "FujiNet Test"
+    BUTTON "Ping FujiNet" ID MainPingButton AT (CENTER 140 70 AUTO)
+END
+
+ALERT ID RomIncompatibleAlert
+ERROR
+BEGIN
+    TITLE "FujiNet Test"
+    MESSAGE "This app needs Palm OS 3.3 or later."
+    BUTTONS "OK"
+END

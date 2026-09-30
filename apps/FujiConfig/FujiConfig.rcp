@@ -1,0 +1,81 @@
+#include "FujiConfigRsc.h"
+
+VERSION ID 1 "0.1"
+
+ICONFAMILYEX
+BEGIN
+    BITMAP "icon.bmp" BPP 1
+END
+
+FORM ID MainForm AT (0 0 160 160)
+NOFRAME
+USABLE
+BEGIN
+    TITLE "FujiNet Config"
+    LABEL "Host slots" AUTOID AT (2 16) FONT 1
+    LIST "" "" "" "" "" "" "" "" ID MainHostList AT (2 30 156 88) VISIBLEITEMS 8
+    BUTTON "Browse" ID MainBrowseButton AT (1 130 36 AUTO)
+    BUTTON "Edit" ID MainEditButton AT (PREVRIGHT+3 PREVTOP 28 AUTO)
+    BUTTON "Queue" ID MainQueueButton AT (PREVRIGHT+3 PREVTOP 34 AUTO)
+    BUTTON "Info" ID MainInfoButton AT (PREVRIGHT+3 PREVTOP 28 AUTO)
+    BUTTON "HotSync" ID MainHotSyncButton AT (1 146 48 AUTO)
+END
+
+FORM ID EditForm AT (0 0 160 160)
+NOFRAME
+USABLE
+BEGIN
+    TITLE "Edit Host Slot"
+    LABEL "Host name (blank to clear):" AUTOID AT (2 20)
+    FIELD ID EditField AT (2 36 156 12) EDITABLE UNDERLINED SINGLELINE MAXCHARS 31 AUTOSHIFT
+    LABEL "SD is FujiNet's card; others are" AUTOID AT (2 60)
+    LABEL "TNFS servers, e.g. apps.irata.online" AUTOID AT (2 72)
+    BUTTON "Save" ID EditSaveButton AT (1 146 36 AUTO)
+    BUTTON "Cancel" ID EditCancelButton AT (PREVRIGHT+4 PREVTOP 40 AUTO)
+    GRAFFITISTATEINDICATOR AT (145 146)
+END
+
+FORM ID BrowseForm AT (0 0 160 160)
+NOFRAME
+USABLE
+BEGIN
+    TITLE "Browse"
+    LIST "" ID BrowseList AT (0 28 160 110) VISIBLEITEMS 10
+    BUTTON "Open" ID BrowseOpenButton AT (1 146 40 AUTO)
+    BUTTON "Up" ID BrowseUpButton AT (PREVRIGHT+4 PREVTOP 30 AUTO)
+    BUTTON "Done" ID BrowseDoneButton AT (PREVRIGHT+4 PREVTOP 36 AUTO)
+END
+
+FORM ID QueueForm AT (0 0 160 160)
+NOFRAME
+USABLE
+BEGIN
+    TITLE "Queued for HotSync"
+    LIST "" ID QueueList AT (0 16 160 121) VISIBLEITEMS 11
+    BUTTON "HotSync Now" ID QueueHotSyncButton AT (1 146 60 AUTO)
+    BUTTON "Done" ID QueueDoneButton AT (PREVRIGHT+4 PREVTOP 36 AUTO)
+END
+
+ALERT ID MessageAlert
+INFORMATION
+BEGIN
+    TITLE "FujiNet"
+    MESSAGE "^1^2^3"
+    BUTTONS "OK"
+END
+
+ALERT ID ConfirmQueueAlert
+CONFIRMATION
+BEGIN
+    TITLE "Queue for HotSync"
+    MESSAGE "Install ^1 on the next HotSync?^2^3"
+    BUTTONS "Queue" "Cancel"
+END
+
+ALERT ID RomIncompatibleAlert
+ERROR
+BEGIN
+    TITLE "FujiNet Config"
+    MESSAGE "This app needs Palm OS 3.3 or later."
+    BUTTONS "OK"
+END

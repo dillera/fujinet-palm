@@ -1,0 +1,12 @@
+# Build output
+apps/*/*.prc
+apps/*/*.bin
+apps/*/resources.stamp
+apps/*/icon.bmp
+apps/FujiConfig/FujiConfig
+apps/FujiNetTest/FujiNetTest
+tests/*.o
+tests/fujibus_interop_test
+tools/hotsync-harness/hotsync
+tools/hotsync-harness/firstlight
+*.dSYM
