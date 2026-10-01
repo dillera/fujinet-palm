@@ -1,0 +1,89 @@
+#include "HoldemRsc.h"
+
+VERSION ID 1 "0.1"
+
+ICONFAMILYEX
+BEGIN
+    BITMAP "icon.bmp" BPP 1
+END
+
+FORM ID SetupForm AT (0 0 160 160)
+NOFRAME
+USABLE
+MENUID SetupMenu
+BEGIN
+    TITLE "FN Texas Hold'em"
+    LABEL "Name:" AUTOID AT (2 17)
+    FIELD ID SetupNameField AT (38 17 50 12) UNDERLINED SINGLELINE MAXCHARS 8
+    LABEL "Server:" AUTOID AT (2 31)
+    FIELD ID SetupServerField AT (38 31 120 12) UNDERLINED SINGLELINE MAXCHARS 63
+    LABEL "Tables" AUTOID AT (2 46) FONT 1
+    BUTTON "Refresh" ID SetupRefreshButton AT (118 45 40 12) FONT 0
+    LIST "" ID SetupList AT (2 59 156 66) VISIBLEITEMS 6
+    LABEL "Table:" AUTOID AT (2 130)
+    FIELD ID SetupTableField AT (38 130 50 12) UNDERLINED SINGLELINE MAXCHARS 8
+    BUTTON "Sit Down" ID SetupSitButton AT (1 147 AUTO AUTO)
+    FIELD ID SetupStatusField AT (50 148 96 11) NONEDITABLE SINGLELINE MAXCHARS 47
+    GRAFFITISTATEINDICATOR AT (150 148)
+END
+
+FORM ID TableForm AT (0 0 160 160)
+NOFRAME
+USABLE
+MENUID TableMenu
+BEGIN
+END
+
+MENU ID SetupMenu
+BEGIN
+    PULLDOWN "Game"
+    BEGIN
+        MENUITEM "Refresh Tables" ID SetupMenuRefresh "R"
+        MENUITEM "Default Server" ID SetupMenuDefault
+        MENUITEM SEPARATOR
+        MENUITEM "About" ID SetupMenuAbout
+    END
+END
+
+MENU ID TableMenu
+BEGIN
+    PULLDOWN "Table"
+    BEGIN
+        MENUITEM "Leave Table" ID TableMenuLeave "L"
+        MENUITEM "Last Result" ID TableMenuResult "S"
+        MENUITEM SEPARATOR
+        MENUITEM "About" ID TableMenuAbout
+    END
+END
+
+ALERT ID RomIncompatibleAlert
+ERROR
+BEGIN
+    TITLE "FN Texas Hold'em"
+    MESSAGE "This app needs Palm OS 3.3 or later."
+    BUTTONS "OK"
+END
+
+ALERT ID MessageAlert
+ERROR
+BEGIN
+    TITLE "FN Texas Hold'em"
+    MESSAGE "^1^2^3"
+    BUTTONS "OK"
+END
+
+ALERT ID ResultAlert
+INFORMATION
+BEGIN
+    TITLE "Last Hand"
+    MESSAGE "^1^2^3"
+    BUTTONS "OK"
+END
+
+ALERT ID AboutAlert
+INFORMATION
+BEGIN
+    TITLE "FN Texas Hold'em"
+    MESSAGE "Multiplayer Texas Hold'em against the FujiNet game server, through FujiNet's N1: device.\n\nTap a move, or pick one with the scroll keys and press any app button.\n\nCard art from the Apple II and Lynx clients of fujinet-texasHoldEm (GPL-3.0)."
+    BUTTONS "OK"
+END

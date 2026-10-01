@@ -13,3 +13,5 @@ tools/hotsync-harness/firstlight
 *.dSYM
 tests/lobbyjson_test
 apps/FujiLobby/FujiLobby
+tests/holdem_test
+apps/Holdem/Holdem
