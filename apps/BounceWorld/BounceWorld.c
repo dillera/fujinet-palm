@@ -13,7 +13,7 @@
 #include "fnnet.h"
 #include "BounceWorldRsc.h"
 
-#define CREATOR (((UInt32)'F' << 24) | ((UInt32)'n' << 16) | ((UInt32)'B' << 8) | 'w')
+#define CREATOR APP_CREATOR
 #define PREFS_ID 1
 #define PREFS_VERSION 1
 

@@ -11,7 +11,7 @@ FORM ID ConnectForm AT (0 0 160 160)
 NOFRAME
 USABLE
 BEGIN
-    TITLE "Bounce World"
+    TITLE "FN Bounce World"
     LABEL "Server:" AUTOID AT (4 20)
     FIELD ID ConnectHostField AT (42 20 114 12) UNDERLINED SINGLELINE MAXCHARS 47
     LABEL "Port:" AUTOID AT (4 36)
@@ -60,7 +60,7 @@ END
 ALERT ID RomIncompatibleAlert
 ERROR
 BEGIN
-    TITLE "Bounce World"
+    TITLE "FN Bounce World"
     MESSAGE "This app needs Palm OS 3.3 or later."
     BUTTONS "OK"
 END
@@ -68,7 +68,7 @@ END
 ALERT ID MessageAlert
 ERROR
 BEGIN
-    TITLE "Bounce World"
+    TITLE "FN Bounce World"
     MESSAGE "^1^2^3"
     BUTTONS "OK"
 END

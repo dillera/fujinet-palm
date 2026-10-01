@@ -18,10 +18,10 @@ serves the Palm two ways on the same port:
 
 | App             | Creator | What it does                                                  |
 |-----------------|---------|---------------------------------------------------------------|
-| FujiNet Config  | `FjCf`  | edit and browse host slots, queue apps for HotSync, HotSync now |
-| FujiNet Test    | `FjTs`  | reads FujiNet's network settings to check the link            |
-| Bounce World    | `FnBw`  | client for a [bounce-world](https://github.com/markjfisher/bounce-world) server, through FujiNet's N1: |
-| FujiNet Lobby   | `FnLb`  | lists the game servers in the [FujiNet Game Lobby](https://github.com/FujiNetWIFI/fujinet-lobby) (`/viewFull`), with players, platforms and client URLs |
+| FN HotSync      | `ADHS`  | edit and browse host slots, queue apps for HotSync, HotSync now |
+| FN Test         | `ADTS`  | reads FujiNet's network settings to check the link            |
+| FN Bounce World | `ADBW`  | client for a [bounce-world](https://github.com/markjfisher/bounce-world) server, through FujiNet's N1: |
+| FN Lobby        | `ADLB`  | lists the game servers in the [FujiNet Game Lobby](https://github.com/FujiNetWIFI/fujinet-lobby) (`/viewFull`), with players, platforms and client URLs |
 | FN Texas Hold'em | `ADTH` | multiplayer Texas Hold'em against the [FujiNet Hold'em server](https://github.com/dillera/servers/tree/main/fujinet-game-system/texasholdem), with the other platforms' clients, through FujiNet's N1: |
 
 All need Palm OS 3.3 or later (the Serial Manager with `SrmOpen`).
@@ -101,6 +101,10 @@ python3 tools/make_cards.py ../fujinet-texasHoldEm   # writes apps/Holdem/cardar
 ```
 
 ## Writing an app
+
+Name the app `FN <name>` and give it its own creator code, `AD` plus two
+capitals, set once as `CREATOR` in its Makefile; C code reads it as
+`APP_CREATOR` (from `fn_types.h`).
 
 Link `common/fujibus.c` and `common/fnlink.c`, and call the `Fn*` functions in
 `fnlink.h`. FujiNet listens for a HotSync on the same port whenever no FujiBus

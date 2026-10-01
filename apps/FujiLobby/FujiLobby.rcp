@@ -12,7 +12,7 @@ NOFRAME
 USABLE
 MENUID MainMenu
 BEGIN
-    TITLE "FujiNet Lobby"
+    TITLE "FN Lobby"
     LIST "" ID MainList AT (0 16 160 110) VISIBLEITEMS 10
     FIELD ID MainStatusField AT (2 131 156 11) NONEDITABLE SINGLELINE MAXCHARS 48
     BUTTON "Refresh" ID MainRefreshButton AT (1 147 AUTO AUTO)
@@ -44,7 +44,7 @@ END
 ALERT ID RomIncompatibleAlert
 ERROR
 BEGIN
-    TITLE "FujiNet Lobby"
+    TITLE "FN Lobby"
     MESSAGE "This app needs Palm OS 3.3 or later."
     BUTTONS "OK"
 END
@@ -52,7 +52,7 @@ END
 ALERT ID MessageAlert
 ERROR
 BEGIN
-    TITLE "FujiNet Lobby"
+    TITLE "FN Lobby"
     MESSAGE "^1^2^3"
     BUTTONS "OK"
 END
@@ -60,7 +60,7 @@ END
 ALERT ID AboutAlert
 INFORMATION
 BEGIN
-    TITLE "FujiNet Lobby"
+    TITLE "FN Lobby"
     MESSAGE "Lists the game servers known to the FujiNet Game Lobby, fetched through FujiNet's N1: device.\n\n^1"
     BUTTONS "OK"
 END

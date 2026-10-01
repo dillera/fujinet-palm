@@ -18,7 +18,7 @@
 #include "cards.h"
 #include "HoldemRsc.h"
 
-#define CREATOR (((UInt32)'A' << 24) | ((UInt32)'D' << 16) | ((UInt32)'T' << 8) | 'H')
+#define CREATOR APP_CREATOR
 #define PREFS_ID 1
 #define PREFS_VERSION 1
 

@@ -1,4 +1,4 @@
-/* FujiNet Config for Palm OS.
+/* FN HotSync for Palm OS.
  *
  * Browses and edits FujiNet's host slots, queues Palm apps and databases for the next
  * HotSync by copying them into /palm/install on FujiNet's SD card, and
@@ -135,7 +135,7 @@ static void MainShowHosts(FormType *form)
 
     SetBusy(form, "Asking FujiNet...");
     err = LoadHosts();
-    SetBusy(form, "FujiNet Config");
+    SetBusy(form, "FN HotSync");
     LstSetListChoices(list, gHostChoices, FN_MAX_HOSTS);
     LstSetSelection(list, noListSelection);
     LstDrawList(list);

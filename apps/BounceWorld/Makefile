@@ -1,5 +1,5 @@
 APP     = BounceWorld
-NAME    = "Bounce World"
-CREATOR = FnBw
+NAME    = "FN Bounce World"
+CREATOR = ADBW
 COMMON_EXTRA = fnnet.c
 include ../app.mk

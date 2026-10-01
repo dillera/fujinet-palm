@@ -1,4 +1,4 @@
-/* FujiNet Test: asks the FujiNet on the cradle for its network settings
+/* FN Test: asks the FujiNet on the cradle for its network settings
  * over FujiBus, as a quick check that the link works. */
 #include <PalmOS.h>
 

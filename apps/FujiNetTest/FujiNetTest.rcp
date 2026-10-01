@@ -11,14 +11,14 @@ FORM ID MainForm AT (0 0 160 160)
 NOFRAME
 USABLE
 BEGIN
-    TITLE "FujiNet Test"
+    TITLE "FN Test"
     BUTTON "Ping FujiNet" ID MainPingButton AT (CENTER 140 70 AUTO)
 END
 
 ALERT ID RomIncompatibleAlert
 ERROR
 BEGIN
-    TITLE "FujiNet Test"
+    TITLE "FN Test"
     MESSAGE "This app needs Palm OS 3.3 or later."
     BUTTONS "OK"
 END

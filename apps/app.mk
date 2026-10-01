@@ -4,7 +4,7 @@
 # Run inside the palmdev image (see the top-level Makefile).
 COMMON  = ../../common
 CC      = m68k-palmos-gcc
-CFLAGS  = -O2 -Wall -palmos3.5 -I$(COMMON) -I.
+CFLAGS  = -O2 -Wall -palmos3.5 -I$(COMMON) -I. '-DAPP_CREATOR_STR="$(CREATOR)"'
 SOURCES = $(APP).c $(SOURCES_EXTRA) $(COMMON)/fujibus.c $(COMMON)/fnlink.c $(COMMON_EXTRA:%=$(COMMON)/%)
 
 $(APP).prc: $(APP) resources.stamp

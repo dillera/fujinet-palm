@@ -1,4 +1,4 @@
 APP     = FujiNetTest
-NAME    = "FujiNet Test"
-CREATOR = FjTs
+NAME    = "FN Test"
+CREATOR = ADTS
 include ../app.mk

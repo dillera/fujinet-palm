@@ -1,5 +1,5 @@
 APP     = FujiLobby
-NAME    = "FujiNet Lobby"
-CREATOR = FnLb
+NAME    = "FN Lobby"
+CREATOR = ADLB
 COMMON_EXTRA = fnnet.c lobbyjson.c
 include ../app.mk

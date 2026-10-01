@@ -1,4 +1,4 @@
 APP     = FujiConfig
-NAME    = "FujiNet Config"
-CREATOR = FjCf
+NAME    = "FN HotSync"
+CREATOR = ADHS
 include ../app.mk

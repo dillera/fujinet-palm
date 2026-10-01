@@ -11,7 +11,7 @@ FORM ID MainForm AT (0 0 160 160)
 NOFRAME
 USABLE
 BEGIN
-    TITLE "FujiNet Config"
+    TITLE "FN HotSync"
     LABEL "Host slots" AUTOID AT (2 16) FONT 1
     LIST "" "" "" "" "" "" "" "" ID MainHostList AT (2 30 156 88) VISIBLEITEMS 8
     BUTTON "Browse" ID MainBrowseButton AT (1 130 36 AUTO)
@@ -75,7 +75,7 @@ END
 ALERT ID RomIncompatibleAlert
 ERROR
 BEGIN
-    TITLE "FujiNet Config"
+    TITLE "FN HotSync"
     MESSAGE "This app needs Palm OS 3.3 or later."
     BUTTONS "OK"
 END

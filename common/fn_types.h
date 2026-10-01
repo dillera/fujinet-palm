@@ -8,6 +8,11 @@ typedef UInt8 fn_u8;
 typedef UInt16 fn_u16;
 typedef UInt32 fn_u32;
 #define fn_memcpy(dst, src, n) MemMove((dst), (src), (n))
+/* The app's creator ID, from CREATOR in its Makefile (see apps/app.mk). */
+#ifdef APP_CREATOR_STR
+#define APP_CREATOR (((UInt32)(UInt8)APP_CREATOR_STR[0] << 24) | ((UInt32)(UInt8)APP_CREATOR_STR[1] << 16) | \
+                     ((UInt32)(UInt8)APP_CREATOR_STR[2] << 8) | (UInt32)(UInt8)APP_CREATOR_STR[3])
+#endif
 #else
 #include <stdint.h>
 #include <string.h>

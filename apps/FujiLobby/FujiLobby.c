@@ -1,4 +1,4 @@
-/* FujiNet Lobby for Palm OS.
+/* FN Lobby for Palm OS.
  *
  * Lists the game servers registered with the FujiNet Game Lobby
  * (github.com/FujiNetWIFI/fujinet-lobby), so the games that already run
@@ -17,7 +17,7 @@
 #include "lobbyjson.h"
 #include "FujiLobbyRsc.h"
 
-#define CREATOR (((UInt32)'F' << 24) | ((UInt32)'n' << 16) | ((UInt32)'L' << 8) | 'b')
+#define CREATOR APP_CREATOR
 #define PREFS_ID 1
 #define PREFS_VERSION 1
 
@@ -432,7 +432,7 @@ static void OpenDetail(Int16 item)
 
 static void SetTitle(FormType *form)
 {
-    StrCopy(gTitle, gPrefs.useQA ? "FujiNet QA Lobby" : "FujiNet Lobby");
+    StrCopy(gTitle, gPrefs.useQA ? "FN QA Lobby" : "FN Lobby");
     FrmSetTitle(form, gTitle);
 }
 
