@@ -1,0 +1,74 @@
+#include "BounceWorldRsc.h"
+
+VERSION ID 1 "0.1"
+
+ICONFAMILYEX
+BEGIN
+    BITMAP "icon.bmp" BPP 1
+END
+
+FORM ID ConnectForm AT (0 0 160 160)
+NOFRAME
+USABLE
+BEGIN
+    TITLE "Bounce World"
+    LABEL "Server:" AUTOID AT (4 20)
+    FIELD ID ConnectHostField AT (42 20 114 12) UNDERLINED SINGLELINE MAXCHARS 47
+    LABEL "Port:" AUTOID AT (4 36)
+    FIELD ID ConnectPortField AT (42 36 34 12) UNDERLINED SINGLELINE NUMERIC MAXCHARS 5
+    LABEL "Name:" AUTOID AT (4 52)
+    FIELD ID ConnectNameField AT (42 52 50 12) UNDERLINED SINGLELINE MAXCHARS 8
+    LABEL "The server's framed TCP port," AUTOID AT (4 72) FONT 0
+    LABEL "9003 on bounce-world 2.3+." AUTOID AT (4 83) FONT 0
+    LABEL "Keys: F freeze  R reset  + - speed" AUTOID AT (4 100) FONT 0
+    LABEL "1-5 add a body  W who  I info" AUTOID AT (4 111) FONT 0
+    LABEL "Hard keys: up/down speed, 1 freeze," AUTOID AT (4 122) FONT 0
+    LABEL "2 add, 3 who, 4 info." AUTOID AT (4 133) FONT 0
+    BUTTON "Connect" ID ConnectButton AT (4 146 AUTO AUTO)
+    GRAFFITISTATEINDICATOR AT (148 148)
+END
+
+FORM ID WorldForm AT (0 0 160 160)
+NOFRAME
+USABLE
+MENUID WorldMenu
+BEGIN
+    BUTTON "Frz" ID WorldFreezeButton AT (1 147 19 12)
+    BUTTON "Rst" ID WorldResetButton AT (PREVRIGHT+3 147 19 12)
+    BUTTON "+" ID WorldFasterButton AT (PREVRIGHT+3 147 12 12)
+    BUTTON "-" ID WorldSlowerButton AT (PREVRIGHT+3 147 12 12)
+    POPUPTRIGGER "Add" ID WorldAddTrigger AT (PREVRIGHT+3 147 27 12) LEFTANCHOR
+    BUTTON "Who" ID WorldWhoButton AT (PREVRIGHT+3 147 22 12)
+    BUTTON "Info" ID WorldInfoButton AT (PREVRIGHT+3 147 22 12)
+    LIST "1" "2" "3" "4" "5" ID WorldAddList AT (80 92 20 AUTO) NONUSABLE VISIBLEITEMS 5
+    POPUPLIST ID WorldAddTrigger WorldAddList
+END
+
+MENU ID WorldMenu
+BEGIN
+    PULLDOWN "World"
+    BEGIN
+        MENUITEM "Freeze" ID WorldMenuFreeze "F"
+        MENUITEM "Reset" ID WorldMenuReset "R"
+        MENUITEM "Who" ID WorldMenuWho "W"
+        MENUITEM "Info" ID WorldMenuInfo "I"
+        MENUITEM SEPARATOR
+        MENUITEM "Disconnect" ID WorldMenuDisconnect "Q"
+    END
+END
+
+ALERT ID RomIncompatibleAlert
+ERROR
+BEGIN
+    TITLE "Bounce World"
+    MESSAGE "This app needs Palm OS 3.3 or later."
+    BUTTONS "OK"
+END
+
+ALERT ID MessageAlert
+ERROR
+BEGIN
+    TITLE "Bounce World"
+    MESSAGE "^1^2^3"
+    BUTTONS "OK"
+END

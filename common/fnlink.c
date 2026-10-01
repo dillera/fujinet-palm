@@ -3,9 +3,6 @@
 #include "fnlink.h"
 
 #define FN_BAUD 115200L
-/* Long enough to span a 1.5 s HotSync window more than twice. */
-#define FN_ATTEMPTS 8
-#define FN_REPLY_WAIT_TICKS (SysTicksPerSecond() * 7 / 10)
 /* A copy runs before FujiNet replies; resending mid-copy would repeat it. */
 #define FN_COPY_ATTEMPTS 3
 #define FN_COPY_WAIT_TICKS (SysTicksPerSecond() * 60)
@@ -81,11 +78,10 @@ static UInt16 ReceiveFrame(UInt32 deadline)
     return 0;
 }
 
-/* One request/reply exchange, resent until FujiNet answers. */
-static Err CallWaiting(UInt8 command, const FbParam *params, UInt16 nparams,
-                       const void *payload, UInt16 payloadLen,
-                       void *reply, UInt16 replyMax, UInt16 *replyLen,
-                       UInt16 attempts, UInt32 waitTicks)
+Err FnCallDevice(UInt8 device, UInt8 command, const FbParam *params, UInt16 nparams,
+                 const void *payload, UInt16 payloadLen,
+                 void *reply, UInt16 replyMax, UInt16 *replyLen,
+                 UInt16 attempts, UInt32 waitTicks)
 {
     UInt8 request[FB_MAX_FRAME];
     UInt16 requestLen, frameLen, i;
@@ -94,7 +90,7 @@ static Err CallWaiting(UInt8 command, const FbParam *params, UInt16 nparams,
 
     if (!gOpen && (err = FnOpen()) != errNone)
         return err;
-    requestLen = fb_build_request(FB_DEVICE_FUJINET, command, params, nparams,
+    requestLen = fb_build_request(device, command, params, nparams,
                                   (const UInt8 *)payload, payloadLen, request, sizeof(request));
     if (requestLen == 0)
         return fnErrTooBig;
@@ -104,7 +100,8 @@ static Err CallWaiting(UInt8 command, const FbParam *params, UInt16 nparams,
         SrmSend(gPort, request, requestLen, &err);
         SrmSendWait(gPort);
         frameLen = ReceiveFrame(TimGetTicks() + waitTicks);
-        if (frameLen == 0 || !fb_parse_reply(gFrame, frameLen, &parsed))
+        if (frameLen == 0 || !fb_parse_reply(gFrame, frameLen, &parsed) ||
+            parsed.device != device)
             continue;
         if (parsed.command != FB_CMD_ACK)
             return fnErrRefused;
@@ -121,8 +118,8 @@ static Err Call(UInt8 command, const FbParam *params, UInt16 nparams,
                 const void *payload, UInt16 payloadLen,
                 void *reply, UInt16 replyMax, UInt16 *replyLen, UInt16 attempts)
 {
-    return CallWaiting(command, params, nparams, payload, payloadLen, reply, replyMax,
-                       replyLen, attempts, FN_REPLY_WAIT_TICKS);
+    return FnCallDevice(FB_DEVICE_FUJINET, command, params, nparams, payload, payloadLen,
+                        reply, replyMax, replyLen, attempts, FN_REPLY_WAIT_TICKS);
 }
 
 Err FnGetAdapterConfig(FnAdapterConfig *config)
@@ -242,6 +239,6 @@ Err FnCopyFile(UInt8 fromSlot, const char *path, UInt8 toSlot, const char *folde
         if (err != errNone)
             return err;
     }
-    return CallWaiting(CMD_COPY_FILE, p, 2, spec, StrLen(spec), NULL, 0, NULL,
+    return FnCallDevice(FB_DEVICE_FUJINET, CMD_COPY_FILE, p, 2, spec, StrLen(spec), NULL, 0, NULL,
                        FN_COPY_ATTEMPTS, FN_COPY_WAIT_TICKS);
 }

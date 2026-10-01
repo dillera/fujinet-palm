@@ -20,8 +20,9 @@ serves the Palm two ways on the same port:
 |-----------------|---------|---------------------------------------------------------------|
 | FujiNet Config  | `FjCf`  | edit and browse host slots, queue apps for HotSync, HotSync now |
 | FujiNet Test    | `FjTs`  | reads FujiNet's network settings to check the link            |
+| Bounce World    | `FnBw`  | client for a [bounce-world](https://github.com/markjfisher/bounce-world) server, through FujiNet's N1: |
 
-Both need Palm OS 3.3 or later (the Serial Manager with `SrmOpen`).
+All need Palm OS 3.3 or later (the Serial Manager with `SrmOpen`).
 
 Queuing copies the chosen file into `/palm/install` on the host slot named
 `SD`; the next HotSync installs it.
@@ -51,6 +52,7 @@ and HotSync.
 |--------------------------|--------------------------------------------------------|
 | `common/fujibus.*`       | FujiBus (SLIP) request/reply framing, portable C89     |
 | `common/fnlink.*`        | FujiNet commands over the cradle port, with retries   |
+| `common/fnnet.*`         | N: network devices (open, status, read, write, close) |
 | `apps/*/`                | one app per folder; `apps/app.mk` has the build rules  |
 | `tests/`                 | FujiBus interop test against `FujiBusPacket.cpp`       |
 | `tools/hotsync-harness/` | runs the firmware's HotSync code on a Mac, against a real cradle or an emulator |

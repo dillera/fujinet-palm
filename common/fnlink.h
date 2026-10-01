@@ -12,6 +12,10 @@
 #define FN_HOSTNAME_LEN 32
 #define FN_DIR_ENTRY_LEN 64
 
+/* Long enough to span a 1.5 s HotSync window more than twice. */
+#define FN_ATTEMPTS 8
+#define FN_REPLY_WAIT_TICKS (SysTicksPerSecond() * 7 / 10)
+
 /* Errors, in the application error range. */
 #define fnErrNoReply  (appErrorClass | 1)
 #define fnErrRefused  (appErrorClass | 2) /* FujiNet answered NAK */
@@ -32,6 +36,13 @@ typedef struct {
 
 Err FnOpen(void);
 void FnClose(void);
+
+/* One request/reply exchange with any FujiBus device, sent up to attempts
+ * times until it answers, waiting waitTicks for each reply. */
+Err FnCallDevice(UInt8 device, UInt8 command, const FbParam *params, UInt16 nparams,
+                 const void *payload, UInt16 payloadLen,
+                 void *reply, UInt16 replyMax, UInt16 *replyLen,
+                 UInt16 attempts, UInt32 waitTicks);
 
 Err FnGetAdapterConfig(FnAdapterConfig *config);
 Err FnReadHostSlots(char hosts[FN_MAX_HOSTS][FN_HOSTNAME_LEN]);

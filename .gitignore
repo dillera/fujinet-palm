@@ -5,6 +5,7 @@ apps/*/resources.stamp
 apps/*/icon.bmp
 apps/FujiConfig/FujiConfig
 apps/FujiNetTest/FujiNetTest
+apps/BounceWorld/BounceWorld
 tests/*.o
 tests/fujibus_interop_test
 tools/hotsync-harness/hotsync
