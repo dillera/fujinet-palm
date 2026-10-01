@@ -11,3 +11,5 @@ tests/fujibus_interop_test
 tools/hotsync-harness/hotsync
 tools/hotsync-harness/firstlight
 *.dSYM
+tests/lobbyjson_test
+apps/FujiLobby/FujiLobby

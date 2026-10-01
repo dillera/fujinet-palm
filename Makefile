@@ -1,5 +1,5 @@
 # Builds every Palm app in the palmdev Docker image (see docker/Dockerfile).
-APPS  = FujiConfig FujiNetTest BounceWorld
+APPS  = FujiConfig FujiNetTest BounceWorld FujiLobby
 IMAGE = palmdev
 DOCKER = docker run --rm --platform linux/amd64 -v $(CURDIR):/src -w /src $(IMAGE)
 

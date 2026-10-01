@@ -21,6 +21,13 @@
 /* OPEN modes and translations, as for N: on the 8-bit machines. */
 #define FN_NET_READ_WRITE 12
 #define FN_NET_TRANS_NONE 0
+/* For an HTTP URL, 12 is a plain GET. */
+#define FN_NET_HTTP_GET FN_NET_READ_WRITE
+
+/* NDEV status codes in FnNetStatus.error (status_error_codes.h). */
+#define FN_NET_OK          1
+#define FN_NET_EOF         136
+#define FN_NET_NOT_FOUND   170
 
 typedef struct {
     UInt16 avail;       /* bytes waiting to be read */
@@ -31,6 +38,11 @@ typedef struct {
 Err FnNetOpen(UInt8 unit, const char *url, UInt8 mode, UInt8 trans);
 Err FnNetClose(UInt8 unit);
 Err FnNetGetStatus(UInt8 unit, FnNetStatus *status);
+/* As FnNetGetStatus, sent at most twice with a long wait for each reply. The
+ * first STATUS after opening an HTTP URL is when FujiNet makes the request,
+ * which can take longer than an ordinary reply; resending it meanwhile would
+ * leave late STATUS replies queued in front of the next READ. */
+Err FnNetGetStatusWait(UInt8 unit, FnNetStatus *status, UInt32 waitTicks);
 /* Reads up to len (at most FN_NET_CHUNK) bytes; *got says how many came. */
 Err FnNetRead(UInt8 unit, void *buf, UInt16 len, UInt16 *got);
 Err FnNetWrite(UInt8 unit, const void *buf, UInt16 len);

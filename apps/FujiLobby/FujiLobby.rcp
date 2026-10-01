@@ -1,0 +1,66 @@
+#include "FujiLobbyRsc.h"
+
+VERSION ID 1 "0.1"
+
+ICONFAMILYEX
+BEGIN
+    BITMAP "icon.bmp" BPP 1
+END
+
+FORM ID MainForm AT (0 0 160 160)
+NOFRAME
+USABLE
+MENUID MainMenu
+BEGIN
+    TITLE "FujiNet Lobby"
+    LIST "" ID MainList AT (0 16 160 110) VISIBLEITEMS 10
+    FIELD ID MainStatusField AT (2 131 156 11) NONEDITABLE SINGLELINE MAXCHARS 48
+    BUTTON "Refresh" ID MainRefreshButton AT (1 147 AUTO AUTO)
+    BUTTON "Details" ID MainInfoButton AT (PREVRIGHT+4 147 AUTO AUTO)
+END
+
+FORM ID DetailForm AT (2 2 156 156)
+MODAL
+USABLE
+DEFAULTBTNID DetailDoneButton
+BEGIN
+    TITLE "Game Server"
+    FIELD ID DetailField AT (4 15 140 122) NONEDITABLE MULTIPLELINES MAXCHARS 2048
+    SCROLLBAR ID DetailScrollBar AT (147 15 7 122) VALUE 0 MIN 0 MAX 0 PAGESIZE 11
+    BUTTON "Done" ID DetailDoneButton AT (4 140 AUTO AUTO)
+END
+
+MENU ID MainMenu
+BEGIN
+    PULLDOWN "Lobby"
+    BEGIN
+        MENUITEM "Refresh" ID MainMenuRefresh "R"
+        MENUITEM "Use QA Lobby" ID MainMenuQA "Q"
+        MENUITEM SEPARATOR
+        MENUITEM "About" ID MainMenuAbout
+    END
+END
+
+ALERT ID RomIncompatibleAlert
+ERROR
+BEGIN
+    TITLE "FujiNet Lobby"
+    MESSAGE "This app needs Palm OS 3.3 or later."
+    BUTTONS "OK"
+END
+
+ALERT ID MessageAlert
+ERROR
+BEGIN
+    TITLE "FujiNet Lobby"
+    MESSAGE "^1^2^3"
+    BUTTONS "OK"
+END
+
+ALERT ID AboutAlert
+INFORMATION
+BEGIN
+    TITLE "FujiNet Lobby"
+    MESSAGE "Lists the game servers known to the FujiNet Game Lobby, fetched through FujiNet's N1: device.\n\n^1"
+    BUTTONS "OK"
+END

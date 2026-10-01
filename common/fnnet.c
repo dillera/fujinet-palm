@@ -68,23 +68,34 @@ Err FnNetClose(UInt8 unit)
 }
 
 /* The reply is the firmware's NDeviceStatus: avail (little-endian), conn, err. */
-Err FnNetGetStatus(UInt8 unit, FnNetStatus *status)
+static Err GetStatus(UInt8 unit, FnNetStatus *status, UInt16 attempts, UInt32 waitTicks)
 {
     UInt8 raw[4];
     UInt16 got = 0;
     Err err;
 
     MemSet(status, sizeof(*status), 0);
-    err = NetCall(unit, NETCMD_STATUS, NULL, 0, NULL, 0, raw, sizeof(raw), &got,
-                  FN_ATTEMPTS);
+    err = FnCallDevice(FN_NET_DEVICE(unit), NETCMD_STATUS, NULL, 0, NULL, 0, raw,
+                       sizeof(raw), &got, attempts, waitTicks);
     if (err != errNone)
         return err;
+    gLastTicks = TimGetTicks();
     if (got < sizeof(raw))
         return fnErrRefused;
     status->avail = raw[0] | ((UInt16)raw[1] << 8);
     status->connected = raw[2];
     status->error = raw[3];
     return errNone;
+}
+
+Err FnNetGetStatus(UInt8 unit, FnNetStatus *status)
+{
+    return GetStatus(unit, status, FN_ATTEMPTS, FN_REPLY_WAIT_TICKS);
+}
+
+Err FnNetGetStatusWait(UInt8 unit, FnNetStatus *status, UInt32 waitTicks)
+{
+    return GetStatus(unit, status, 2, waitTicks);
 }
 
 Err FnNetRead(UInt8 unit, void *buf, UInt16 len, UInt16 *got)

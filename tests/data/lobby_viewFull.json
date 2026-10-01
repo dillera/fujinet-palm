@@ -1,0 +1,990 @@
+[
+    {
+        "game": "Reversi",
+        "appkey": 3,
+        "server": "Main Room",
+        "region": "us",
+        "serverurl": "TCP://apps.irata.online:1025/",
+        "status": "online",
+        "maxplayers": 2,
+        "curplayers": 2,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "TNFS://apps.irata.online/Atari_8-bit/Games/Reversi.atr"
+            }
+        ]
+    },
+    {
+        "game": "5 Card Stud",
+        "appkey": 1,
+        "server": "AI Room - 2 bots",
+        "region": "us",
+        "serverurl": "https://5card.carr-designs.com/?table=ai2",
+        "status": "online",
+        "maxplayers": 6,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/5card.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/5card.po"
+            },
+            {
+                "platform": "adam",
+                "url": "TNFS://apps.irata.online/Coleco_Adam/Games/fcs.ddp"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fcs.img"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fcs.dsk"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FCS1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/5card.rom"
+            }
+        ]
+    },
+    {
+        "game": "5 Card Stud",
+        "appkey": 1,
+        "server": "AI Room - 4 bots",
+        "region": "us",
+        "serverurl": "https://5card.carr-designs.com/?table=ai4",
+        "status": "online",
+        "maxplayers": 4,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/5card.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/5card.po"
+            },
+            {
+                "platform": "adam",
+                "url": "TNFS://apps.irata.online/Coleco_Adam/Games/fcs.ddp"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fcs.img"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fcs.dsk"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FCS1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/5card.rom"
+            }
+        ]
+    },
+    {
+        "game": "5 Card Stud",
+        "appkey": 1,
+        "server": "AI Room - 6 bots",
+        "region": "us",
+        "serverurl": "https://5card.carr-designs.com/?table=ai6",
+        "status": "online",
+        "maxplayers": 2,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/5card.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/5card.po"
+            },
+            {
+                "platform": "adam",
+                "url": "TNFS://apps.irata.online/Coleco_Adam/Games/fcs.ddp"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fcs.img"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fcs.dsk"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FCS1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/5card.rom"
+            }
+        ]
+    },
+    {
+        "game": "5 Card Stud",
+        "appkey": 1,
+        "server": "The Basement",
+        "region": "us",
+        "serverurl": "https://5card.carr-designs.com/?table=basement",
+        "status": "online",
+        "maxplayers": 8,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/5card.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/5card.po"
+            },
+            {
+                "platform": "adam",
+                "url": "TNFS://apps.irata.online/Coleco_Adam/Games/fcs.ddp"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fcs.img"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fcs.dsk"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FCS1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/5card.rom"
+            }
+        ]
+    },
+    {
+        "game": "5 Card Stud",
+        "appkey": 1,
+        "server": "The Den",
+        "region": "us",
+        "serverurl": "https://5card.carr-designs.com/?table=den",
+        "status": "online",
+        "maxplayers": 8,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/5card.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/5card.po"
+            },
+            {
+                "platform": "adam",
+                "url": "TNFS://apps.irata.online/Coleco_Adam/Games/fcs.ddp"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fcs.img"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fcs.dsk"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FCS1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/5card.rom"
+            }
+        ]
+    },
+    {
+        "game": "Baseball",
+        "appkey": 100,
+        "server": "Baseball Netplay",
+        "region": "us",
+        "serverurl": "TCP://localhost:9100/",
+        "status": "online",
+        "maxplayers": 2,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "intellivision",
+                "url": "TNFS://apps.irata.online/INTV/FUJINET/baseball_net.bin"
+            }
+        ]
+    },
+    {
+        "game": "Baseball",
+        "appkey": 10,
+        "server": "Baseball Netplay",
+        "region": "us",
+        "serverurl": "TCP://fujinet.online:9100/",
+        "status": "online",
+        "maxplayers": 2,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "intv",
+                "url": "TNFS://apps.irata.online/INTV/FUJINET/baseball_net.bin"
+            }
+        ]
+    },
+    {
+        "game": "Battleship",
+        "appkey": 5,
+        "server": "AI - 1 on 1",
+        "region": "us",
+        "serverurl": "https://battleship.carr-designs.com/?table=ai1",
+        "status": "online",
+        "maxplayers": 4,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fbs.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fbs.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fbs.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fbs.img"
+            },
+            {
+                "platform": "c64",
+                "url": "tnfs://ec.tnfs.io/c64/fbs.prg"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FBS1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fbs.rom"
+            }
+        ]
+    },
+    {
+        "game": "Battleship",
+        "appkey": 5,
+        "server": "AI - 2 Bots",
+        "region": "us",
+        "serverurl": "https://battleship.carr-designs.com/?table=ai2",
+        "status": "online",
+        "maxplayers": 4,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fbs.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fbs.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fbs.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fbs.img"
+            },
+            {
+                "platform": "c64",
+                "url": "tnfs://ec.tnfs.io/c64/fbs.prg"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FBS1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fbs.rom"
+            }
+        ]
+    },
+    {
+        "game": "Battleship",
+        "appkey": 5,
+        "server": "AI - 3 Bots",
+        "region": "us",
+        "serverurl": "https://battleship.carr-designs.com/?table=ai3",
+        "status": "online",
+        "maxplayers": 4,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fbs.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fbs.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fbs.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fbs.img"
+            },
+            {
+                "platform": "c64",
+                "url": "tnfs://ec.tnfs.io/c64/fbs.prg"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FBS1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fbs.rom"
+            }
+        ]
+    },
+    {
+        "game": "Battleship",
+        "appkey": 5,
+        "server": "Cape Fuji",
+        "region": "us",
+        "serverurl": "https://battleship.carr-designs.com/?table=r1",
+        "status": "online",
+        "maxplayers": 4,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fbs.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fbs.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fbs.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fbs.img"
+            },
+            {
+                "platform": "c64",
+                "url": "tnfs://ec.tnfs.io/c64/fbs.prg"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FBS1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fbs.rom"
+            }
+        ]
+    },
+    {
+        "game": "Battleship",
+        "appkey": 5,
+        "server": "High Seas",
+        "region": "us",
+        "serverurl": "https://battleship.carr-designs.com/?table=r2",
+        "status": "online",
+        "maxplayers": 4,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fbs.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fbs.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fbs.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fbs.img"
+            },
+            {
+                "platform": "c64",
+                "url": "tnfs://ec.tnfs.io/c64/fbs.prg"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FBS1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fbs.rom"
+            }
+        ]
+    },
+    {
+        "game": "FujiRealm Demo",
+        "appkey": 2,
+        "server": "The Realm",
+        "region": "us",
+        "serverurl": "tcp://fujinet.online:9010",
+        "status": "online",
+        "maxplayers": 32,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "TNFS://tnfs.fujinet.online/ATARI/netgames/fujirealm.atr"
+            }
+        ]
+    },
+    {
+        "game": "Fujirkle",
+        "appkey": 9,
+        "server": "AI Room - 2 bots",
+        "region": "us",
+        "serverurl": "https://fujirkle.carr-designs.com/?table=ai2",
+        "status": "online",
+        "maxplayers": 6,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fujirkle.atr"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fujirkle.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fujirkle.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fujirkle.img"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fujirkle.rom"
+            }
+        ]
+    },
+    {
+        "game": "Fujirkle",
+        "appkey": 9,
+        "server": "AI Room - 4 bots",
+        "region": "us",
+        "serverurl": "https://fujirkle.carr-designs.com/?table=ai4",
+        "status": "online",
+        "maxplayers": 6,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fujirkle.atr"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fujirkle.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fujirkle.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fujirkle.img"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fujirkle.rom"
+            }
+        ]
+    },
+    {
+        "game": "Fujirkle",
+        "appkey": 9,
+        "server": "Kitchen Table",
+        "region": "us",
+        "serverurl": "https://fujirkle.carr-designs.com/?table=kit",
+        "status": "online",
+        "maxplayers": 6,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fujirkle.atr"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fujirkle.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fujirkle.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fujirkle.img"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fujirkle.rom"
+            }
+        ]
+    },
+    {
+        "game": "Fujirkle",
+        "appkey": 9,
+        "server": "The Bar",
+        "region": "us",
+        "serverurl": "https://fujirkle.carr-designs.com/?table=bar",
+        "status": "online",
+        "maxplayers": 6,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fujirkle.atr"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fujirkle.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fujirkle.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fujirkle.img"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fujirkle.rom"
+            }
+        ]
+    },
+    {
+        "game": "Fujitzee",
+        "appkey": 3,
+        "server": "AI Room - 2 bots",
+        "region": "us",
+        "serverurl": "https://fujitzee.carr-designs.com/?table=ai2",
+        "status": "online",
+        "maxplayers": 6,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fujitzee.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fujitzee.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fujitzee.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fujitzee.img"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FJT1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fujitzee.rom"
+            }
+        ]
+    },
+    {
+        "game": "Fujitzee",
+        "appkey": 3,
+        "server": "AI Room - 4 bots",
+        "region": "us",
+        "serverurl": "https://fujitzee.carr-designs.com/?table=ai4",
+        "status": "online",
+        "maxplayers": 6,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fujitzee.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fujitzee.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fujitzee.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fujitzee.img"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FJT1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fujitzee.rom"
+            }
+        ]
+    },
+    {
+        "game": "Fujitzee",
+        "appkey": 3,
+        "server": "Kitchen Table",
+        "region": "us",
+        "serverurl": "https://fujitzee.carr-designs.com/?table=kit",
+        "status": "online",
+        "maxplayers": 6,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fujitzee.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fujitzee.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fujitzee.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fujitzee.img"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FJT1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fujitzee.rom"
+            }
+        ]
+    },
+    {
+        "game": "Fujitzee",
+        "appkey": 3,
+        "server": "The Bar",
+        "region": "us",
+        "serverurl": "https://fujitzee.carr-designs.com/?table=bar",
+        "status": "online",
+        "maxplayers": 6,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/fujitzee.xex"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/fujitzee.po"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/fujitzee.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/fujitzee.img"
+            },
+            {
+                "platform": "ti99",
+                "url": "https://ftp.whtech.com/TIPI/FJT1"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/fujitzee.rom"
+            }
+        ]
+    },
+    {
+        "game": "Maze War",
+        "appkey": 3,
+        "server": "Maze War 1 Zombie",
+        "region": "us",
+        "serverurl": "tcp://fujinet.online:5026",
+        "status": "online",
+        "maxplayers": 4,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://tnfs.fujinet.online/ATARI/netgames/maze-war-net.xex"
+            }
+        ]
+    },
+    {
+        "game": "Maze War",
+        "appkey": 3,
+        "server": "Maze War 2 Zombies",
+        "region": "us",
+        "serverurl": "tcp://fujinet.online:5027",
+        "status": "online",
+        "maxplayers": 4,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://tnfs.fujinet.online/ATARI/netgames/maze-war-net.xex"
+            }
+        ]
+    },
+    {
+        "game": "Maze War",
+        "appkey": 3,
+        "server": "Maze War 3 Zombies",
+        "region": "us",
+        "serverurl": "tcp://fujinet.online:5028",
+        "status": "online",
+        "maxplayers": 4,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://tnfs.fujinet.online/ATARI/netgames/maze-war-net.xex"
+            }
+        ]
+    },
+    {
+        "game": "Maze War",
+        "appkey": 3,
+        "server": "Maze War Humans Only",
+        "region": "us",
+        "serverurl": "tcp://fujinet.online:5025",
+        "status": "online",
+        "maxplayers": 4,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://tnfs.fujinet.online/ATARI/netgames/maze-war-net.xex"
+            }
+        ]
+    },
+    {
+        "game": "Royal Game of Ur",
+        "appkey": 6,
+        "server": "ur-thefnords",
+        "region": "us",
+        "serverurl": "tcp://thefnords.com:1234/",
+        "status": "online",
+        "maxplayers": 2,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "atari",
+                "url": "tnfs://thefnords.com/ur.xex"
+            },
+            {
+                "platform": "adam",
+                "url": "tnfs://thefnords.com/ur.ddp"
+            },
+            {
+                "platform": "c64",
+                "url": "tnfs://thefnords.com/ur.prg"
+            },
+            {
+                "platform": "apple2",
+                "url": "tnfs://thefnords.com/ur.system"
+            }
+        ]
+    },
+    {
+        "game": "Texas Hold'em",
+        "appkey": 8,
+        "server": "AI Room - 2 bots",
+        "region": "us",
+        "serverurl": "https://th.carr-designs.com/?table=ai2",
+        "status": "online",
+        "maxplayers": 6,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/texas.po"
+            },
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/texas.xex"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/texas.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/texas.img"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/texas.rom"
+            }
+        ]
+    },
+    {
+        "game": "Texas Hold'em",
+        "appkey": 8,
+        "server": "AI Room - 4 bots",
+        "region": "us",
+        "serverurl": "https://th.carr-designs.com/?table=ai4",
+        "status": "online",
+        "maxplayers": 4,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/texas.po"
+            },
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/texas.xex"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/texas.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/texas.img"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/texas.rom"
+            }
+        ]
+    },
+    {
+        "game": "Texas Hold'em",
+        "appkey": 8,
+        "server": "AI Room - 6 bots",
+        "region": "us",
+        "serverurl": "https://th.carr-designs.com/?table=ai6",
+        "status": "online",
+        "maxplayers": 2,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/texas.po"
+            },
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/texas.xex"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/texas.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/texas.img"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/texas.rom"
+            }
+        ]
+    },
+    {
+        "game": "Texas Hold'em",
+        "appkey": 8,
+        "server": "The Basement",
+        "region": "us",
+        "serverurl": "https://th.carr-designs.com/?table=basement",
+        "status": "online",
+        "maxplayers": 8,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/texas.po"
+            },
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/texas.xex"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/texas.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/texas.img"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/texas.rom"
+            }
+        ]
+    },
+    {
+        "game": "Texas Hold'em",
+        "appkey": 8,
+        "server": "The Den",
+        "region": "us",
+        "serverurl": "https://th.carr-designs.com/?table=den",
+        "status": "online",
+        "maxplayers": 8,
+        "curplayers": 0,
+        "clients": [
+            {
+                "platform": "apple2",
+                "url": "tnfs://ec.tnfs.io/apple2/texas.po"
+            },
+            {
+                "platform": "atari",
+                "url": "tnfs://ec.tnfs.io/atari/texas.xex"
+            },
+            {
+                "platform": "coco",
+                "url": "tnfs://ec.tnfs.io/coco/texas.dsk"
+            },
+            {
+                "platform": "msdos",
+                "url": "tnfs://ec.tnfs.io/msdos/texas.img"
+            },
+            {
+                "platform": "intv",
+                "url": "tnfs://ec.tnfs.io/intv/texas.rom"
+            }
+        ]
+    }
+]

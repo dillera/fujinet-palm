@@ -21,6 +21,7 @@ serves the Palm two ways on the same port:
 | FujiNet Config  | `FjCf`  | edit and browse host slots, queue apps for HotSync, HotSync now |
 | FujiNet Test    | `FjTs`  | reads FujiNet's network settings to check the link            |
 | Bounce World    | `FnBw`  | client for a [bounce-world](https://github.com/markjfisher/bounce-world) server, through FujiNet's N1: |
+| FujiNet Lobby   | `FnLb`  | lists the game servers in the [FujiNet Game Lobby](https://github.com/FujiNetWIFI/fujinet-lobby) (`/viewFull`), with players, platforms and client URLs |
 
 All need Palm OS 3.3 or later (the Serial Manager with `SrmOpen`).
 
@@ -36,7 +37,8 @@ under emulation):
 ```sh
 make image    # once: builds the palmdev image from docker/Dockerfile
 make          # builds apps/*/*.prc
-make test     # desktop test of the FujiBus codec against the firmware's own
+make test     # desktop tests: the FujiBus codec against the firmware's own,
+              # and the lobby JSON reader against a saved /viewFull reply
 ```
 
 `make test` and the harness below expect a `fujinet-firmware` checkout next to
@@ -53,8 +55,9 @@ and HotSync.
 | `common/fujibus.*`       | FujiBus (SLIP) request/reply framing, portable C89     |
 | `common/fnlink.*`        | FujiNet commands over the cradle port, with retries   |
 | `common/fnnet.*`         | N: network devices (open, status, read, write, close) |
+| `common/lobbyjson.*`     | streaming reader for the lobby's JSON server list     |
 | `apps/*/`                | one app per folder; `apps/app.mk` has the build rules  |
-| `tests/`                 | FujiBus interop test against `FujiBusPacket.cpp`       |
+| `tests/`                 | FujiBus interop test against `FujiBusPacket.cpp`; lobby JSON reader test |
 | `tools/hotsync-harness/` | runs the firmware's HotSync code on a Mac, against a real cradle or an emulator |
 | `docker/`                | the palmdev toolchain image                            |
 
