@@ -1,4 +1,4 @@
-/* FN Test: checks the link to the FujiNet NIO on the cradle. Ping asks the
+/* FI Test: checks the link to the FujiNet NIO on the cradle. Ping asks the
  * FujiNet for its firmware and network; Fetch gets a web page through it. */
 #include <PalmOS.h>
 

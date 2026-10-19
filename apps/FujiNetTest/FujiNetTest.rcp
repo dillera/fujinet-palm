@@ -11,7 +11,7 @@ FORM ID MainForm AT (0 0 160 160)
 NOFRAME
 USABLE
 BEGIN
-    TITLE "FN Test"
+    TITLE "FI Test"
     BUTTON "Ping" ID MainPingButton AT (20 140 50 AUTO)
     BUTTON "Fetch" ID MainFetchButton AT (90 140 50 AUTO)
 END
@@ -19,7 +19,7 @@ END
 ALERT ID RomIncompatibleAlert
 ERROR
 BEGIN
-    TITLE "FN Test"
+    TITLE "FI Test"
     MESSAGE "This app needs Palm OS 3.1 or later."
     BUTTONS "OK"
 END
