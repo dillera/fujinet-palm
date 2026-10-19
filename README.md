@@ -21,8 +21,8 @@ serves the Palm two ways on the same port:
 | App             | Creator | What it does                                                  |
 |-----------------|---------|---------------------------------------------------------------|
 | FN HotSync      | `ADHS`  | edit and browse host slots, queue apps for HotSync, HotSync now |
-| FN Test         | `ADTS`  | checks the link to a FujiNet NIO: firmware, board and network, and fetches a web page |
-| FN Bounce World | `ADBW`  | client for a [bounce-world](https://github.com/markjfisher/bounce-world) server, through FujiNet's N1: |
+| FI Test         | `ANTS`  | checks the link to a FujiNet NIO: firmware, board and network, and fetches a web page |
+| FI Bounce       | `ANBW`  | client for a [bounce-world](https://github.com/markjfisher/bounce-world) server (default `bouncy.diller.org:9003`) through a FujiNet NIO; its Info box counts cradle exchanges, so it doubles as a link stress test |
 | FN Lobby        | `ADLB`  | lists the game servers in the [FujiNet Game Lobby](https://github.com/FujiNetWIFI/fujinet-lobby) (`/viewFull`), with players, platforms and client URLs |
 | FN Texas Hold'em | `ADTH` | multiplayer Texas Hold'em against the [FujiNet Hold'em server](https://github.com/dillera/servers/tree/main/fujinet-game-system/texasholdem), with the other platforms' clients, through FujiNet's N1: |
 | FN FujiPet      | `ADFP`  | a virtual pet that grows up like the 1996 original, and meets other pets on a FujiPet friend server through FujiNet's N1: |
@@ -33,9 +33,10 @@ library's `SerOpen` before that. `make traps` lists any Palm OS call an app
 makes that is newer than 3.1, so a new one is noticed before it crashes an
 older Palm.
 
-FN Test talks to [FujiNet NIO](https://github.com/markjfisher/fujinet-nio)
-through `fujinet-nio-lib` (its `palm` target); the others still speak the
-classic firmware's FujiBus commands.
+Apps named FI talk to [FujiNet NIO](https://github.com/markjfisher/fujinet-nio)
+through `fujinet-nio-lib` (its `palm` target); apps named FN speak the classic
+firmware's FujiBus commands. An FI app has its own creator code (`AN..`), so it
+can sit beside its FN counterpart on the same Palm.
 
 Queuing copies the chosen file into `/palm/install` on the host slot named
 `SD`; the next HotSync installs it.
@@ -55,7 +56,7 @@ make test     # desktop tests: the FujiBus codec against the firmware's own,
               # FujiPet's life cycle and protocol, and its friend server
 ```
 
-`make` also builds `fujinet-nio-lib` for FN Test. It looks for the library in
+`make` also builds `fujinet-nio-lib` for the FI apps. It looks for the library in
 `../fujinet-nio-workspace/repos/fujinet-nio-lib`; set `NIO_LIB` to use another
 checkout. `make test` and the harness below expect a `fujinet-firmware`
 checkout next to this repository.

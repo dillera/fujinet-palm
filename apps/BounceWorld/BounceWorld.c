@@ -1,23 +1,29 @@
 /* Bounce World for Palm OS.
  *
  * A client for Mark Fisher's bounce-world server, ported from
- * bounce-world-client. It reaches the server's framed TCP port through
- * FujiNet's N1: device, registers as a 40x36 character screen, and polls for
- * the shapes in its part of the world, drawing each character as a 4x4 cell.
+ * bounce-world-client. It reaches the server's framed TCP port through a
+ * FujiNet NIO on the cradle (fujinet-nio-lib), registers as a 40x36 character
+ * screen, and polls for the shapes in its part of the world, drawing each
+ * character as a 4x4 cell. It polls as fast as the line allows, which makes
+ * it a stress test of the cradle link; the info box counts the exchanges.
  *
  * Every request is a line ending in LF; every reply is a 2-byte
  * little-endian total size followed by the payload.
  */
 #include <PalmOS.h>
 
-#include "fnnet.h"
+#include "fn_types.h"
+#include "fujinet-nio.h"
 #include "BounceWorldRsc.h"
 
 #define CREATOR APP_CREATOR
 #define PREFS_ID 1
 #define PREFS_VERSION 1
 
-#define NET_UNIT 1
+/* Largest READ; with its header it fits the library's 512-byte packet. */
+#define NET_CHUNK 256
+/* A lost reply is asked for again this many times in all. */
+#define NET_TRIES 3
 #define CLIENT_VERSION "2"
 
 #define COLS 40
@@ -42,6 +48,7 @@
 #define DRAIN_QUIET_TICKS (SysTicksPerSecond() / 2)
 #define DRAIN_MAX_TICKS (SysTicksPerSecond() * 3)
 #define MAX_FAILURES 5
+#define CONNECT_TICKS (SysTicksPerSecond() * 10)
 
 /* Status bits in each world reply. */
 #define CLIENT_CHANGE 1
@@ -53,6 +60,8 @@
 #define bwErrTimeout (appErrorClass | 0x11)
 #define bwErrReply   (appErrorClass | 0x12)
 #define bwErrDropped (appErrorClass | 0x13)
+/* A fujinet-nio-lib error, in the low byte. */
+#define bwErrNio     (appErrorClass | 0x100)
 
 typedef struct {
     char host[HOST_LEN];
@@ -90,16 +99,23 @@ static UInt8 gStep;
 static UInt8 gFailures;
 static Boolean gShowInfo, gShowWho, gShowMessage, gDark;
 static WinHandle gOffscreen;
+
+static fn_handle_t gHandle = FN_INVALID_HANDLE;
+static UInt32 gReadAt, gWriteAt;
+/* For the info box: requests to the server, exchanges with FujiNet, lost
+ * replies asked for again, and exchanges given up on. */
+static UInt32 gRequests, gExchanges;
+static UInt16 gRetries, gLost;
 static char gTitle[32];
 
 static void ShowError(const char *what, Err err)
 {
     char detail[80];
 
-    if (err == fnErrNoReply)
+    if (err == (bwErrNio | FN_ERR_TIMEOUT))
         StrCopy(detail, "\nNo answer from FujiNet. Is the cradle cabled to it?");
-    else if (err == fnErrRefused)
-        StrCopy(detail, "\nFujiNet refused; check the server name and port.");
+    else if ((err & 0xFF00) == bwErrNio)
+        StrPrintF(detail, "\nFujiNet: %s.", fn_error_string((uint8_t)err));
     else if (err == bwErrClosed)
         StrCopy(detail, "\nThe server closed the connection.");
     else if (err == bwErrTimeout)
@@ -115,41 +131,103 @@ static void ShowError(const char *what, Err err)
 
 /* ---- Server protocol ------------------------------------------------- */
 
+/* A library result as an Err, for ShowError. */
+static Err NioErr(uint8_t result)
+{
+    return result == FN_OK ? errNone : (bwErrNio | result);
+}
+
+/* A reply lost on the cradle line, or cut short on it. */
+static Boolean LostReply(uint8_t result)
+{
+    return result == FN_ERR_TIMEOUT || result == FN_ERR_TRANSPORT || result == FN_ERR_IO;
+}
+
+/* Writes all of len bytes. A WRITE whose reply was lost is sent again at
+ * the same offset; NIO acknowledges a repeat without sending the bytes to
+ * the server twice. Until the connection is up a WRITE is not ready, so the
+ * first one waits for the connect. */
+static Err WriteAll(const UInt8 *data, UInt16 len)
+{
+    UInt32 deadline = TimGetTicks() + CONNECT_TICKS;
+    uint16_t written;
+    uint8_t result;
+    UInt8 tries = 0;
+
+    for (;;) {
+        gExchanges++;
+        result = fn_write(gHandle, gWriteAt, data, len, &written);
+        if (result == FN_OK)
+            break;
+        if ((result == FN_ERR_NOT_READY || result == FN_ERR_BUSY) && TimGetTicks() < deadline) {
+            SysTaskDelay(POLL_TICKS);
+            continue;
+        }
+        if (!LostReply(result) || ++tries >= NET_TRIES) {
+            gLost++;
+            return NioErr(result);
+        }
+        gRetries++;
+    }
+    gWriteAt += written;
+    return errNone;
+}
+
 static Err Send(const char *line)
 {
     char buf[LINE_LEN];
     UInt16 len = StrLen(line);
 
     if (len + 1 > sizeof(buf))
-        return fnErrTooBig;
+        return bwErrReply;
     StrCopy(buf, line);
     buf[len] = 0x0A;
-    return FnNetWrite(NET_UNIT, buf, len + 1);
+    return WriteAll((const UInt8 *)buf, len + 1);
 }
 
-/* Reads exactly len bytes, sizing each READ by what FujiNet has waiting. */
+/* Reads exactly len bytes. READ is non-blocking: NOT_READY means nothing has
+ * come from the server yet. A READ whose reply was lost is sent again at the
+ * same offset and size; NIO answers a repeat with the same bytes. */
 static Err ReadExact(UInt8 *buf, UInt16 len, UInt32 deadline)
 {
-    FnNetStatus status;
-    UInt16 total = 0, want, got;
-    Err err;
+    UInt16 total = 0, want;
+    uint16_t got;
+    uint8_t flags, result;
+    UInt8 tries = 0;
 
     while (total < len) {
-        if ((err = FnNetGetStatus(NET_UNIT, &status)) != errNone)
-            return err;
-        if (status.avail == 0) {
-            if (!status.connected)
-                return bwErrClosed;
+        want = len - total;
+        if (want > NET_CHUNK)
+            want = NET_CHUNK;
+        gExchanges++;
+        result = fn_read(gHandle, gReadAt, buf + total, want, &got, &flags);
+        if (LostReply(result)) {
+            if (++tries >= NET_TRIES) {
+                gLost++;
+                return NioErr(result);
+            }
+            gRetries++;
+            continue;
+        }
+        tries = 0;
+        if (result == FN_ERR_NOT_READY) {
             if (TimGetTicks() > deadline)
                 return bwErrTimeout;
             SysTaskDelay(1);
             continue;
         }
-        want = len - total;
-        if (want > status.avail)
-            want = status.avail;
-        if ((err = FnNetRead(NET_UNIT, buf + total, want, &got)) != errNone)
-            return err;
+        if (result != FN_OK)
+            return NioErr(result);
+        if (got == 0) {
+            if (flags & FN_READ_EOF)
+                return bwErrClosed;
+            if (TimGetTicks() > deadline)
+                return bwErrTimeout;
+            continue;
+        }
+        if (got > want)
+            return bwErrReply;
+        gReadAt += got;
         total += got;
     }
     return errNone;
@@ -182,36 +260,35 @@ static Err ReadReply(UInt8 *buf, UInt16 max, UInt16 *len)
     return errNone;
 }
 
-/* After a lost READ or WRITE the stream may hold part of a reply; reading
- * until it stays empty puts the next request back in step. */
+/* After a request fails part way the stream may hold part of a reply;
+ * reading until it stays empty puts the next request back in step. */
 static void Drain(void)
 {
     UInt32 start = TimGetTicks(), quiet = start + DRAIN_QUIET_TICKS;
-    FnNetStatus status;
     UInt8 skip[64];
-    UInt16 got;
+    uint16_t got;
+    uint8_t flags, result;
 
     while (TimGetTicks() < quiet && TimGetTicks() - start < DRAIN_MAX_TICKS) {
-        if (FnNetGetStatus(NET_UNIT, &status) != errNone || !status.connected)
-            return;
-        if (status.avail == 0) {
+        gExchanges++;
+        result = fn_read(gHandle, gReadAt, skip, sizeof(skip), &got, &flags);
+        if (result == FN_OK && got > 0 && got <= sizeof(skip)) {
+            gReadAt += got;
+            quiet = TimGetTicks() + DRAIN_QUIET_TICKS;
+        } else if (result == FN_ERR_NOT_READY || LostReply(result)) {
             SysTaskDelay(POLL_TICKS);
-            continue;
+        } else {
+            return;
         }
-        FnNetRead(NET_UNIT, skip, status.avail < sizeof(skip) ? status.avail : sizeof(skip),
-                  &got);
-        quiet = TimGetTicks() + DRAIN_QUIET_TICKS;
     }
 }
 
-/* Sends a command and reads its reply. READ and WRITE go out once (see
- * fnnet.h), so a lost one fails the request instead of repeating it; the
- * world poll simply runs again, and a lost command is left for the user to
- * repeat rather than risk doing it twice. */
+/* Sends a command and reads its reply. */
 static Err RequestInto(const char *line, UInt8 *buf, UInt16 max, UInt16 *len)
 {
     Err err = Send(line);
 
+    gRequests++;
     if (err == errNone)
         err = ReadReply(buf, max, len);
     if (err != errNone && err != bwErrClosed)
@@ -358,21 +435,27 @@ static void Disconnect(void)
         StrPrintF(line, "close %d", gClientId);
         Send(line);
     }
-    FnNetClose(NET_UNIT);
+    fn_close(gHandle);
+    gHandle = FN_INVALID_HANDLE;
     gConnected = false;
     gClientId = 0;
 }
 
 static Err Connect(void)
 {
-    char url[HOST_LEN + PORT_LEN + 16];
+    uint8_t result;
     Err err;
 
-    StrPrintF(url, "N1:TCP://%s:%s/", gPrefs.host, gPrefs.port);
-    if ((err = FnNetOpen(NET_UNIT, url, FN_NET_READ_WRITE, FN_NET_TRANS_NONE)) != errNone)
-        return err;
+    result = fn_init();
+    if (result == FN_OK)
+        result = fn_tcp_open(&gHandle, gPrefs.host, (uint16_t)StrAToI(gPrefs.port));
+    if (result != FN_OK)
+        return NioErr(result);
     gConnected = true;
     gClientId = 0;
+    gReadAt = gWriteAt = 0;
+    gRequests = gExchanges = 0;
+    gRetries = gLost = 0;
     if ((err = LoadShapes()) == errNone && (err = Register()) == errNone &&
         (err = LoadWorld()) == errNone)
         err = LoadWho();
@@ -495,18 +578,21 @@ static void DrawInfo(void)
     char line[48];
     Int16 lineH = FntLineHeight();
 
-    DrawBox(1, 1, WORLD_W - 2, 2 * lineH + 2);
+    DrawBox(1, 1, WORLD_W - 2, 3 * lineH + 2);
     StrPrintF(line, "%s  C:%d  %ux%u%s", gPrefs.name, gWorld.clients, gWorld.width,
               gWorld.height, gWorld.frozen ? "  frozen" : "");
     WinDrawChars(line, StrLen(line), 3, 2);
     StrPrintF(line, "Bodies 1:%d 2:%d 3:%d 4:%d 5:%d", gWorld.bodies[0], gWorld.bodies[1],
               gWorld.bodies[2], gWorld.bodies[3], gWorld.bodies[4]);
     WinDrawChars(line, StrLen(line), 3, 2 + lineH);
+    StrPrintF(line, "Req %lu  Xch %lu  Rty %u  Lost %u", gRequests, gExchanges, gRetries,
+              gLost);
+    WinDrawChars(line, StrLen(line), 3, 2 + 2 * lineH);
 }
 
 static void DrawWho(void)
 {
-    Int16 lineH = FntLineHeight(), top = gShowInfo ? 2 * lineH + 6 : 2;
+    Int16 lineH = FntLineHeight(), top = gShowInfo ? 3 * lineH + 6 : 2;
     UInt8 i, rows = gWhoCount;
 
     if ((Int16)rows * lineH + top + 2 > WORLD_H)
@@ -763,7 +849,7 @@ static void GetFieldText(FormType *form, UInt16 id, char *out, UInt16 size, cons
 
 static void SetDefaults(void)
 {
-    StrCopy(gPrefs.host, "localhost");
+    StrCopy(gPrefs.host, "bouncy.diller.org");
     StrCopy(gPrefs.port, "9003");
     StrCopy(gPrefs.name, "palm");
 }
@@ -780,7 +866,7 @@ static void LoadPrefs(void)
 
 static void SavePrefs(FormType *form)
 {
-    GetFieldText(form, ConnectHostField, gPrefs.host, HOST_LEN, "localhost");
+    GetFieldText(form, ConnectHostField, gPrefs.host, HOST_LEN, "bouncy.diller.org");
     GetFieldText(form, ConnectPortField, gPrefs.port, PORT_LEN, "9003");
     GetFieldText(form, ConnectNameField, gPrefs.name, NAME_LEN + 1, "palm");
     PrefSetAppPreferences(CREATOR, PREFS_ID, PREFS_VERSION, &gPrefs, sizeof(gPrefs), true);
@@ -817,7 +903,7 @@ static void ConnectStart(FormType *form)
     StrCopy(gTitle, "Connecting...");
     SetFormTitle(form, gTitle);
     err = Connect();
-    StrCopy(gTitle, "FN Bounce World");
+    StrCopy(gTitle, "FI Bounce");
     SetFormTitle(form, gTitle);
     if (err != errNone) {
         StrPrintF(what, "Could not join %s:%s.", gPrefs.host, gPrefs.port);
@@ -910,14 +996,14 @@ static Err AppStart(void)
 
     LoadPrefs();
     gOffscreen = WinCreateOffscreenWindow(WORLD_W, WORLD_H, screenFormat, &err);
-    return FnOpen();
+    return errNone;
 }
 
 static void AppStop(void)
 {
     Disconnect();
     FrmCloseAllForms();
-    FnClose();
+    fn_shutdown();
     if (gOffscreen)
         WinDeleteWindow(gOffscreen, false);
 }
