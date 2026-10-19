@@ -1,10 +1,13 @@
 # Builds every Palm app in the palmdev Docker image (see docker/Dockerfile).
 APPS  = FujiConfig FujiNetTest BounceWorld FujiLobby Holdem FujiPet
 IMAGE = palmdev
-DOCKER = docker run --rm --platform linux/amd64 -v $(CURDIR):/src -w /src $(IMAGE)
+# fujinet-nio-lib, for the apps that talk to FujiNet NIO (FN Test). Its palm
+# target is built first.
+NIO_LIB ?= $(abspath ../fujinet-nio-workspace/repos/fujinet-nio-lib)
+DOCKER = docker run --rm --platform linux/amd64 -v $(CURDIR):/src -v $(NIO_LIB):/nio-lib -w /src $(IMAGE)
 
 all: $(APPS:%=apps/%/icon.bmp)
-	$(DOCKER) sh -c 'for app in $(APPS); do make -C apps/$$app || exit 1; done'
+	$(DOCKER) sh -c 'make -C /nio-lib palm && for app in $(APPS); do make -C apps/$$app NIO_LIB=/nio-lib || exit 1; done'
 
 # Icons are drawn on the host; the toolchain image has no Python.
 apps/%/icon.bmp: tools/make_icon.py

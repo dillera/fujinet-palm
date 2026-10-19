@@ -1,6 +1,6 @@
 #include "FujiNetTestRsc.h"
 
-VERSION ID 1 "0.1"
+VERSION ID 1 "0.2"
 
 ICONFAMILYEX
 BEGIN
@@ -12,7 +12,8 @@ NOFRAME
 USABLE
 BEGIN
     TITLE "FN Test"
-    BUTTON "Ping FujiNet" ID MainPingButton AT (CENTER 140 70 AUTO)
+    BUTTON "Ping" ID MainPingButton AT (20 140 50 AUTO)
+    BUTTON "Fetch" ID MainFetchButton AT (90 140 50 AUTO)
 END
 
 ALERT ID RomIncompatibleAlert
