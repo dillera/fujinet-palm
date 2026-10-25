@@ -1,6 +1,6 @@
 #include "FujiConfigRsc.h"
 
-VERSION ID 1 "0.1"
+VERSION ID 1 "0.2"
 
 ICONFAMILYEX
 BEGIN
@@ -11,8 +11,8 @@ FORM ID MainForm AT (0 0 160 160)
 NOFRAME
 USABLE
 BEGIN
-    TITLE "FN HotSync"
-    LABEL "Host slots" AUTOID AT (2 16) FONT 1
+    TITLE "FI Config"
+    LABEL "TNFS servers" AUTOID AT (2 16) FONT 1
     LIST "" "" "" "" "" "" "" "" ID MainHostList AT (2 30 156 88) VISIBLEITEMS 8
     BUTTON "Browse" ID MainBrowseButton AT (1 130 36 AUTO)
     BUTTON "Edit" ID MainEditButton AT (PREVRIGHT+3 PREVTOP 28 AUTO)
@@ -25,11 +25,11 @@ FORM ID EditForm AT (0 0 160 160)
 NOFRAME
 USABLE
 BEGIN
-    TITLE "Edit Host Slot"
-    LABEL "Host name (blank to clear):" AUTOID AT (2 20)
+    TITLE "Edit Server"
+    LABEL "TNFS server (blank to clear):" AUTOID AT (2 20)
     FIELD ID EditField AT (2 36 156 12) EDITABLE UNDERLINED SINGLELINE MAXCHARS 31 AUTOSHIFT
-    LABEL "SD is FujiNet's card; others are" AUTOID AT (2 60)
-    LABEL "TNFS servers, e.g. apps.irata.online" AUTOID AT (2 72)
+    LABEL "A name, or name:port, e.g." AUTOID AT (2 60)
+    LABEL "apps.irata.online" AUTOID AT (2 72)
     BUTTON "Save" ID EditSaveButton AT (1 146 36 AUTO)
     BUTTON "Cancel" ID EditCancelButton AT (PREVRIGHT+4 PREVTOP 40 AUTO)
     GRAFFITISTATEINDICATOR AT (145 146)
@@ -75,7 +75,7 @@ END
 ALERT ID RomIncompatibleAlert
 ERROR
 BEGIN
-    TITLE "FN HotSync"
+    TITLE "FI Config"
     MESSAGE "This app needs Palm OS 3.1 or later."
     BUTTONS "OK"
 END

@@ -1,50 +1,69 @@
-/* FN HotSync for Palm OS.
+/* FI Config for Palm OS.
  *
- * Browses and edits FujiNet's host slots, queues Palm apps and databases for the next
- * HotSync by copying them into /palm/install on FujiNet's SD card, and
- * starts that HotSync. It talks to FujiNet with FujiBus over the cradle,
- * the way FujiNet CONFIG does on RS232 machines.
+ * Keeps a list of TNFS servers, browses their folders, queues Palm apps and
+ * databases for the next HotSync by copying them into the HotSync install
+ * folder on a FujiNet NIO's persistent filesystem, and starts that HotSync.
+ * It talks to the FujiNet NIO on the cradle through fujinet-nio-lib: its
+ * FileDevice for the files (filedev.c), FujiDevice and WiFi for Info.
  */
 #include <PalmOS.h>
 
-#include "fnlink.h"
+#include "fn_types.h"
+#include "fujinet-nio.h"
+#include "filedev.h"
 #include "FujiConfigRsc.h"
 
+#define CREATOR APP_CREATOR
+#define PREFS_ID 1
+#define PREFS_VERSION 1
+
+#define MAX_SERVERS 8
+#define HOST_LEN 32
 #define MAX_ENTRIES 100
 #define PATH_LEN 200
 #define TITLE_LEN 40
-#define INSTALL_FOLDER "/palm/install/"
-#define SD_HOST_NAME "SD"
 #define EMPTY_SLOT "(empty)"
+/* NIO's HotSync installs what is in here (hotsync.root is /hotsync). */
+#define QUEUE_URI "persist:///hotsync/install/"
+#define QUEUE_PARENT_URI "persist:///hotsync/"
 
-static char gHosts[FN_MAX_HOSTS][FN_HOSTNAME_LEN];
-static char *gHostChoices[FN_MAX_HOSTS];
-static Int16 gSdSlot = -1;
+/* A Palm database's 78-byte header ends with its entry count; then come
+ * 10-byte resource entries, offset at +6, or 8-byte record entries, offset
+ * first. Bit 0 of the attributes marks a resource database. */
+#define PDB_HEADER_LEN 78
+#define PDB_ATTR_LOW 33
+#define PDB_COUNT 76
 
-static UInt8 gSlot;
-static UInt8 gEditSlot;
+typedef struct {
+    char hosts[MAX_SERVERS][HOST_LEN];
+} Prefs;
+
+static Prefs gPrefs;
+static char *gHostChoices[MAX_SERVERS];
+
+static UInt8 gServer;
+static UInt8 gEditServer;
 static char gPath[PATH_LEN];
 static char gTitle[TITLE_LEN];
 
-static char (*gEntries)[FN_DIR_ENTRY_LEN];
+static FdEntry *gEntries;
 static char **gChoices;
 static UInt16 gCount;
+static UInt8 gChunk[FD_CHUNK];
 
 static void ShowMessage(const char *line1, const char *line2)
 {
     FrmCustomAlert(MessageAlert, line1, line2 ? line2 : "", "");
 }
 
-static void ShowError(const char *what, Err err)
+static void ShowError(const char *what, uint8_t err)
 {
     char detail[64];
 
-    if (err == fnErrNoReply)
+    if (err == FN_ERR_TIMEOUT)
         StrCopy(detail, "\nNo answer from FujiNet. Is the cradle cabled to it?");
-    else if (err == fnErrRefused)
-        StrCopy(detail, "\nFujiNet refused the request.");
     else
-        StrPrintF(detail, "\nError %x.", err);
+        StrPrintF(detail, "\nFujiNet: %s.", fn_error_string(err));
     ShowMessage(what, detail);
 }
 
@@ -85,43 +104,174 @@ static Boolean IsInstallable(const char *name)
     return EndsWith(name, ".prc") || EndsWith(name, ".pdb") || EndsWith(name, ".pqa");
 }
 
+/* ---- Preferences: the TNFS servers ----------------------------------- */
+
+static void SetDefaults(void)
+{
+    MemSet(&gPrefs, sizeof(gPrefs), 0);
+    StrCopy(gPrefs.hosts[0], "fujinet.diller.org");
+    StrCopy(gPrefs.hosts[1], "apps.irata.online");
+}
+
+static void LoadPrefs(void)
+{
+    UInt16 size = sizeof(gPrefs), i;
+
+    if (PrefGetAppPreferences(CREATOR, PREFS_ID, &gPrefs, &size, true) != PREFS_VERSION ||
+        size != sizeof(gPrefs))
+        SetDefaults();
+    for (i = 0; i < MAX_SERVERS; i++) {
+        gPrefs.hosts[i][HOST_LEN - 1] = '\0';
+        gHostChoices[i] = gPrefs.hosts[i][0] ? gPrefs.hosts[i] : EMPTY_SLOT;
+    }
+}
+
+static void SavePrefs(void)
+{
+    PrefSetAppPreferences(CREATOR, PREFS_ID, PREFS_VERSION, &gPrefs, sizeof(gPrefs), true);
+}
+
 /* ---- FujiNet -------------------------------------------------------- */
 
-static Err LoadHosts(void)
+/* Reads a whole folder into gEntries, keeping folders unless filesOnly. */
+static uint8_t ReadDirectory(const char *uri, Boolean filesOnly)
 {
-    UInt16 i;
-    Err err = FnReadHostSlots(gHosts);
+    UInt16 start = 0, next, got, i, kept;
+    Boolean more = true;
+    uint8_t err = FN_OK;
 
-    gSdSlot = -1;
-    for (i = 0; i < FN_MAX_HOSTS; i++) {
-        gHostChoices[i] = gHosts[i][0] ? gHosts[i] : EMPTY_SLOT;
-        if (err == errNone && gSdSlot < 0 && StrCaselessCompare(gHosts[i], SD_HOST_NAME) == 0)
-            gSdSlot = i;
+    gCount = 0;
+    while (more && gCount < MAX_ENTRIES) {
+        err = FdList(uri, start, gEntries + gCount, MAX_ENTRIES - gCount, &got, &next, &more);
+        if (err != FN_OK)
+            break;
+        gCount += got;
+        if (next == start)
+            break; /* a name too long for a page: stop rather than ask again */
+        start = next;
     }
+    kept = 0;
+    for (i = 0; i < gCount; i++) {
+        if (filesOnly && IsFolder(gEntries[i].name))
+            continue;
+        if (kept != i)
+            gEntries[kept] = gEntries[i];
+        gChoices[kept] = gEntries[kept].name;
+        kept++;
+    }
+    gCount = kept;
     return err;
 }
 
-/* Reads a whole directory into gEntries, keeping folders unless filesOnly. */
-static Err ReadDirectory(UInt8 slot, const char *path, Boolean filesOnly)
+/* The server's URI for a name in the current folder, or false if too long. */
+static Boolean ServerUri(const char *name, char *uri)
 {
-    Boolean more = true;
-    UInt16 index = 0;
-    Err err;
+    const char *host = gPrefs.hosts[gServer];
 
-    gCount = 0;
-    if ((err = FnMountHost(slot)) != errNone || (err = FnOpenDirectory(slot, path)) != errNone)
+    if (7 + StrLen(host) + StrLen(gPath) + StrLen(name) > FD_URI_LEN)
+        return false;
+    StrCopy(uri, "tnfs://");
+    StrCat(uri, host);
+    StrCat(uri, gPath);
+    StrCat(uri, name);
+    return true;
+}
+
+/* The copy's progress goes on the free line above the browse list. */
+#define PROGRESS_TOP 15
+#define PROGRESS_HEIGHT 12
+
+static void ClearProgress(void)
+{
+    RectangleType rect;
+
+    RctSetRectangle(&rect, 0, PROGRESS_TOP, 160, PROGRESS_HEIGHT);
+    WinEraseRectangle(&rect, 0);
+}
+
+static void ShowProgress(UInt32 done, UInt32 size, UInt16 *shown)
+{
+    char line[48];
+    UInt16 percent = size ? (UInt16)(done * 100 / size) : 0;
+
+    if (percent == *shown)
+        return;
+    *shown = percent;
+    StrPrintF(line, "Queuing: %lu of %lu bytes", done, size);
+    ClearProgress();
+    WinDrawChars(line, StrLen(line), 2, PROGRESS_TOP);
+}
+
+/* FileDevice can neither rename nor delete, so a copy cut short stays in
+ * the queue, and HotSync would install what it holds. Before the first
+ * chunk is written its first entry's offset is set past the end of any
+ * file, so HotSync refuses the file (it reads "Install failed" in its log)
+ * until the real offset, held back here, is written last. Returns where
+ * those 4 bytes go, or 0 for a database with no entries. */
+static UInt32 HoldBack(UInt8 *chunk, UInt16 len, UInt8 *saved)
+{
+    UInt16 at;
+
+    if (len < PDB_HEADER_LEN || (chunk[PDB_COUNT] == 0 && chunk[PDB_COUNT + 1] == 0))
+        return 0;
+    at = PDB_HEADER_LEN + ((chunk[PDB_ATTR_LOW] & 0x01) ? 6 : 0);
+    if (at + 4 > len)
+        return 0;
+    MemMove(saved, chunk + at, 4);
+    MemSet(chunk + at, 4, 0xFF);
+    return at;
+}
+
+/* Copies a file of size bytes from the server into the HotSync queue, a
+ * chunk at a time with ReadFile and WriteFile, showing how far it has got.
+ * A reply lost on the cradle is asked for again at the same offset (see
+ * filedev.c). */
+static uint8_t CopyToQueue(const char *from, const char *to, UInt32 size)
+{
+    UInt32 offset = 0, patchAt = 0;
+    UInt16 got, shown = 0xFFFF;
+    UInt8 patch[4];
+    Boolean eof = false;
+    uint8_t err;
+
+    if ((err = FdMakeFolder(QUEUE_URI)) != FN_OK)
         return err;
-    while (gCount < MAX_ENTRIES) {
-        err = FnReadDirEntry(index++, gEntries[gCount], &more);
-        if (err != errNone || !more)
+    while (!eof) {
+        ShowProgress(offset, size, &shown);
+        EvtResetAutoOffTimer();
+        if ((err = FdRead(from, offset, gChunk, FD_CHUNK, &got, &eof)) != FN_OK)
+            return err;
+        if (got == 0)
             break;
-        if (filesOnly && IsFolder(gEntries[gCount]))
-            continue;
-        gChoices[gCount] = gEntries[gCount];
-        gCount++;
+        if (offset == 0)
+            patchAt = HoldBack(gChunk, got, patch);
+        if ((err = FdWrite(to, offset, gChunk, got)) != FN_OK)
+            return err;
+        offset += got;
     }
-    FnCloseDirectory();
-    return err;
+    ShowProgress(offset, size, &shown);
+    if (offset != size)
+        return FN_ERR_IO; /* the server sent more or less than it listed */
+    if (patchAt != 0)
+        return FdWrite(to, patchAt, patch, 4);
+    return FN_OK;
+}
+
+/* The queue's URI for name, made FAT-safe as NIO's HotSync names its files. */
+static void QueueUri(const char *name, char *uri)
+{
+    UInt16 at = StrLen(QUEUE_URI), i;
+    char c;
+
+    StrCopy(uri, QUEUE_URI);
+    for (i = 0; name[i] && i < FD_NAME_LEN; i++) {
+        c = name[i];
+        if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+              c == ' ' || c == '-' || c == '_' || c == '.'))
+            c = '_';
+        uri[at++] = c;
+    }
+    uri[at] = '\0';
 }
 
 static void StartHotSync(void)
@@ -130,7 +280,7 @@ static void StartHotSync(void)
     UInt16 card;
     LocalID app;
 
-    FnClose();
+    fn_shutdown(); /* HotSync needs the cradle port */
     if (DmGetNextDatabaseByTypeCreator(true, &search, sysFileTApplication, sysFileCSync, true,
                                        &card, &app) != errNone || app == 0) {
         ShowMessage("The HotSync app is missing.", NULL);
@@ -139,21 +289,15 @@ static void StartHotSync(void)
     SysUIAppSwitch(card, app, sysAppLaunchCmdSyncRequestLocal, NULL);
 }
 
-/* ---- Main form: host slots ------------------------------------------ */
+/* ---- Main form: TNFS servers ----------------------------------------- */
 
-static void MainShowHosts(FormType *form)
+static void MainShowServers(FormType *form)
 {
     ListType *list = FrmGetObjectPtr(form, FrmGetObjectIndex(form, MainHostList));
-    Err err;
 
-    SetBusy(form, "Asking FujiNet...");
-    err = LoadHosts();
-    SetBusy(form, "FN HotSync");
-    LstSetListChoices(list, gHostChoices, FN_MAX_HOSTS);
+    LstSetListChoices(list, gHostChoices, MAX_SERVERS);
     LstSetSelection(list, noListSelection);
     LstDrawList(list);
-    if (err != errNone)
-        ShowError("Could not read the host slots.", err);
 }
 
 static void MainBrowse(FormType *form)
@@ -161,11 +305,11 @@ static void MainBrowse(FormType *form)
     ListType *list = FrmGetObjectPtr(form, FrmGetObjectIndex(form, MainHostList));
     Int16 slot = LstGetSelection(list);
 
-    if (slot == noListSelection || gHosts[slot][0] == '\0') {
-        ShowMessage("Pick a host slot to browse.", NULL);
+    if (slot == noListSelection || gPrefs.hosts[slot][0] == '\0') {
+        ShowMessage("Pick a server to browse.", NULL);
         return;
     }
-    gSlot = (UInt8)slot;
+    gServer = (UInt8)slot;
     StrCopy(gPath, "/");
     FrmGotoForm(BrowseForm);
 }
@@ -176,28 +320,35 @@ static void MainEdit(FormType *form)
     Int16 slot = LstGetSelection(list);
 
     if (slot == noListSelection) {
-        ShowMessage("Pick a host slot to edit.", NULL);
+        ShowMessage("Pick a server to edit.", NULL);
         return;
     }
-    gEditSlot = (UInt8)slot;
+    gEditServer = (UInt8)slot;
     FrmGotoForm(EditForm);
 }
 
 static void MainInfo(void)
 {
-    FnAdapterConfig config;
-    char text[120];
-    Err err = FnGetAdapterConfig(&config);
+    fn_fuji_info_t info;
+    fn_wifi_status_t status;
+    fn_wifi_config_t config;
+    char text[160];
+    uint8_t err = fn_fuji_get_info(&info);
 
-    if (err != errNone) {
-        ShowError("Could not read FujiNet's settings.", err);
+    if (err == FN_ERR_UNSUPPORTED) {
+        StrCopy(info.firmware, "unknown");
+        StrCopy(info.profile, "unknown");
+    } else if (err != FN_OK) {
+        ShowError("Could not reach FujiNet.", err);
         return;
     }
-    config.ssid[sizeof(config.ssid) - 1] = '\0';
-    config.fn_version[sizeof(config.fn_version) - 1] = '\0';
-    StrPrintF(text, "Wi-Fi: %s\nIP: %d.%d.%d.%d\nFirmware: %s", config.ssid,
-              config.localIP[0], config.localIP[1], config.localIP[2], config.localIP[3],
-              config.fn_version);
+    if (fn_wifi_get_status(&status) != FN_OK)
+        status.ip[0] = '\0';
+    if (fn_wifi_get_config(&config) != FN_OK)
+        config.ssid[0] = '\0';
+    StrPrintF(text, "Wi-Fi: %s\nIP: %s\nFirmware: %s\nBoard: %s\nReplies asked again: %u",
+              config.ssid[0] ? config.ssid : "unknown", status.ip[0] ? status.ip : "none",
+              info.firmware, info.profile, gFdRetries);
     ShowMessage(text, NULL);
 }
 
@@ -208,7 +359,7 @@ static Boolean MainHandleEvent(EventType *event)
     switch (event->eType) {
     case frmOpenEvent:
         FrmDrawForm(form);
-        MainShowHosts(form);
+        MainShowServers(form);
         return true;
     case ctlSelectEvent:
         switch (event->data.ctlSelect.controlID) {
@@ -216,10 +367,7 @@ static Boolean MainHandleEvent(EventType *event)
             MainBrowse(form);
             return true;
         case MainQueueButton:
-            if (gSdSlot < 0)
-                ShowMessage("No host slot is named SD, where queued files go.", NULL);
-            else
-                FrmGotoForm(QueueForm);
+            FrmGotoForm(QueueForm);
             return true;
         case MainInfoButton:
             MainInfo();
@@ -240,20 +388,28 @@ static Boolean MainHandleEvent(EventType *event)
 
 /* ---- Browse form ----------------------------------------------------- */
 
+static void BrowseSetTitle(FormType *form)
+{
+    StrPrintF(gTitle, "%s:", gPrefs.hosts[gServer]);
+    StrNCat(gTitle, gPath, TITLE_LEN);
+    SetFormTitle(form, gTitle);
+}
+
 static void BrowseLoad(FormType *form)
 {
     ListType *list = FrmGetObjectPtr(form, FrmGetObjectIndex(form, BrowseList));
-    Err err;
+    char uri[FD_URI_LEN + 1];
+    uint8_t err = FN_ERR_URL_TOO_LONG;
 
     SetBusy(form, "Reading...");
-    err = ReadDirectory(gSlot, gPath, false);
-    StrPrintF(gTitle, "%s:", gHosts[gSlot]);
-    StrNCat(gTitle, gPath, TITLE_LEN);
-    SetFormTitle(form, gTitle);
+    gCount = 0;
+    if (ServerUri("", uri))
+        err = ReadDirectory(uri, false);
+    BrowseSetTitle(form);
     LstSetListChoices(list, gChoices, gCount);
     LstSetSelection(list, noListSelection);
     LstDrawList(list);
-    if (err != errNone)
+    if (err != FN_OK)
         ShowError("Could not read this folder.", err);
 }
 
@@ -271,26 +427,26 @@ static void BrowseUp(FormType *form)
     BrowseLoad(form);
 }
 
-static void BrowseQueue(const char *name)
+static void BrowseQueue(const FdEntry *entry)
 {
-    char path[PATH_LEN];
-    Err err;
+    char from[FD_URI_LEN + 1], to[sizeof(QUEUE_URI) + FD_NAME_LEN];
+    uint8_t err;
 
-    if (gSdSlot < 0) {
-        ShowMessage("No host slot is named SD, where queued files go.", NULL);
+    if (FrmCustomAlert(ConfirmQueueAlert, entry->name, "", "") != 0)
+        return;
+    if (entry->size < PDB_HEADER_LEN) {
+        ShowMessage(entry->name, " is too short to be a Palm app or database.");
         return;
     }
-    if (FrmCustomAlert(ConfirmQueueAlert, name, "", "") != 0)
+    if (!ServerUri(entry->name, from))
         return;
-    if (StrLen(gPath) + StrLen(name) >= PATH_LEN)
-        return;
-    StrCopy(path, gPath);
-    StrCat(path, name);
-    err = FnCopyFile(gSlot, path, (UInt8)gSdSlot, INSTALL_FOLDER);
-    if (err != errNone)
-        ShowError("Could not queue that file.", err);
+    QueueUri(entry->name, to);
+    err = CopyToQueue(from, to, entry->size);
+    ClearProgress();
+    if (err != FN_OK)
+        ShowError("Could not queue that file. HotSync will skip what was copied.", err);
     else
-        ShowMessage(name, " is queued. Tap HotSync to install it.");
+        ShowMessage(entry->name, " is queued. Tap HotSync to install it.");
 }
 
 static void BrowseOpen(FormType *form)
@@ -301,14 +457,14 @@ static void BrowseOpen(FormType *form)
 
     if (item == noListSelection)
         return;
-    name = gEntries[item];
+    name = gEntries[item].name;
     if (IsFolder(name)) {
         if (StrLen(gPath) + StrLen(name) >= PATH_LEN)
             return;
         StrCat(gPath, name);
         BrowseLoad(form);
     } else if (IsInstallable(name)) {
-        BrowseQueue(name);
+        BrowseQueue(&gEntries[item]);
     } else {
         ShowMessage("Only .prc, .pdb and .pqa files install on a Palm.", NULL);
     }
@@ -342,7 +498,7 @@ static Boolean BrowseHandleEvent(EventType *event)
     return false;
 }
 
-/* ---- Edit form: one host slot ---------------------------------------- */
+/* ---- Edit form: one server ------------------------------------------- */
 
 static FieldType *EditGetField(FormType *form)
 {
@@ -352,10 +508,10 @@ static FieldType *EditGetField(FormType *form)
 static void EditShow(FormType *form)
 {
     FieldType *field = EditGetField(form);
-    MemHandle text = MemHandleNew(FN_HOSTNAME_LEN);
+    MemHandle text = MemHandleNew(HOST_LEN);
 
     if (text != NULL) {
-        StrCopy(MemHandleLock(text), gHosts[gEditSlot]);
+        StrCopy(MemHandleLock(text), gPrefs.hosts[gEditServer]);
         MemHandleUnlock(text);
         FldSetTextHandle(field, text);
     }
@@ -365,19 +521,14 @@ static void EditShow(FormType *form)
 
 static void EditSave(FormType *form)
 {
-    char hosts[FN_MAX_HOSTS][FN_HOSTNAME_LEN];
     const char *text = FldGetTextPtr(EditGetField(form));
-    Err err;
+    char *host = gPrefs.hosts[gEditServer];
 
-    MemMove(hosts, gHosts, sizeof(hosts));
-    MemSet(hosts[gEditSlot], FN_HOSTNAME_LEN, 0);
+    MemSet(host, HOST_LEN, 0);
     if (text)
-        StrNCopy(hosts[gEditSlot], text, FN_HOSTNAME_LEN - 1);
-    err = FnWriteHostSlots(hosts);
-    if (err != errNone) {
-        ShowError("Could not save the host slots.", err);
-        return;
-    }
+        StrNCopy(host, text, HOST_LEN - 1);
+    gHostChoices[gEditServer] = host[0] ? host : EMPTY_SLOT;
+    SavePrefs();
     FrmGotoForm(MainForm);
 }
 
@@ -410,15 +561,27 @@ static Boolean EditHandleEvent(EventType *event)
 static void QueueLoad(FormType *form)
 {
     ListType *list = FrmGetObjectPtr(form, FrmGetObjectIndex(form, QueueList));
-    Err err;
+    FdEntry skip;
+    UInt16 got, next;
+    Boolean more;
+    uint8_t err;
 
     SetBusy(form, "Reading...");
-    err = ReadDirectory((UInt8)gSdSlot, INSTALL_FOLDER, true);
+    gCount = 0;
+    /* NIO makes the folder when HotSync is on; make it here in case not. */
+    err = FdMakeFolder(QUEUE_URI);
+    /* NIO answers a folder listed in the last two minutes from a copy it
+     * kept, which misses what a HotSync moved out since. It keeps one such
+     * copy, so listing the folder above first makes it read the queue. */
+    if (err == FN_OK)
+        err = FdList(QUEUE_PARENT_URI, 0, &skip, 1, &got, &next, &more);
+    if (err == FN_OK)
+        err = ReadDirectory(QUEUE_URI, true);
     SetBusy(form, gCount ? "Queued for HotSync" : "Nothing queued");
     LstSetListChoices(list, gChoices, gCount);
     LstSetSelection(list, noListSelection);
     LstDrawList(list);
-    if (err != errNone)
+    if (err != FN_OK)
         ShowError("Could not read the queue.", err);
 }
 
@@ -500,19 +663,20 @@ static Boolean RomCompatible(void)
     return rom >= sysMakeROMVersion(3, 1, 0, sysROMStageRelease, 0);
 }
 
-static Err AppStart(void)
+static uint8_t AppStart(void)
 {
-    gEntries = MemPtrNew(MAX_ENTRIES * FN_DIR_ENTRY_LEN);
+    gEntries = MemPtrNew(MAX_ENTRIES * sizeof(FdEntry));
     gChoices = MemPtrNew(MAX_ENTRIES * sizeof(char *));
     if (gEntries == NULL || gChoices == NULL)
-        return memErrNotEnoughSpace;
-    return FnOpen();
+        return FN_ERR_INTERNAL;
+    LoadPrefs();
+    return fn_init();
 }
 
 static void AppStop(void)
 {
     FrmCloseAllForms();
-    FnClose();
+    fn_shutdown();
     if (gEntries)
         MemPtrFree(gEntries);
     if (gChoices)
@@ -521,7 +685,7 @@ static void AppStop(void)
 
 UInt32 PilotMain(UInt16 cmd, MemPtr cmdPBP, UInt16 launchFlags)
 {
-    Err err;
+    uint8_t err;
 
     if (cmd != sysAppLaunchCmdNormalLaunch)
         return 0;
@@ -530,7 +694,7 @@ UInt32 PilotMain(UInt16 cmd, MemPtr cmdPBP, UInt16 launchFlags)
         return 0;
     }
     err = AppStart();
-    if (err != errNone) {
+    if (err != FN_OK) {
         ShowError("Could not open the cradle port.", err);
         AppStop();
         return 0;
