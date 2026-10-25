@@ -76,6 +76,7 @@ and HotSync.
 | `tools/fujipet-server/`  | the FujiPet friend server (Python 3, no dependencies)  |
 | `tools/hotsync-harness/` | runs the firmware's HotSync code on a Mac, against a real cradle or an emulator |
 | `docker/`                | the palmdev toolchain image                            |
+| `docs/guide/`            | the FujiNet Palm Guide (XeLaTeX, `make` there): every FN and FI app, with screenshots; `fujinet-palm-guide.pdf` |
 | `assets/`                | Palm OS ROMs, emulator images with Setup done (OS 3.1 to 4.0), and the CloudpilotEmu `--serial` patch; see `assets/README.md` |
 | `tools/rig.sh`           | runs an emulated Palm joined to FujiNet-PC or a POSIX FujiNet NIO, for testing |
 

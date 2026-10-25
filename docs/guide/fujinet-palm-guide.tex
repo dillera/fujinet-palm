@@ -1,0 +1,619 @@
+% The FujiNet Palm Guide. Build with `make` (XeLaTeX); see Makefile.
+\documentclass[11pt,letterpaper,openany]{book}
+
+\usepackage[top=0.9in,bottom=0.9in,left=0.85in,right=0.85in,headheight=15pt]{geometry}
+\usepackage{fontspec}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{calc,shadows,shadings,positioning,decorations.pathmorphing}
+\usepackage[most]{tcolorbox}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{multicol}
+\usepackage{fontawesome5}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+
+% ---- Fonts ----------------------------------------------------------------
+\setmainfont{Charter}
+\setsansfont{Avenir Next}[BoldFont={Avenir Next Demi Bold}]
+\setmonofont{Menlo}[Scale=0.85]
+\newfontfamily\heavyfont{Avenir Next Heavy}
+\newfontfamily\demifont{Avenir Next Demi Bold}
+\newfontfamily\condfont{Avenir Next Condensed Demi Bold}
+
+% ---- Colours --------------------------------------------------------------
+\definecolor{navy}{HTML}{14213D}
+\definecolor{ink}{HTML}{1F2A44}
+\definecolor{fujired}{HTML}{E63946}
+\definecolor{nioteal}{HTML}{1A9E8F}
+\definecolor{classicamber}{HTML}{E09F3E}
+\definecolor{lcd}{HTML}{B9C5A6}
+\definecolor{lcddark}{HTML}{8E9C7B}
+\definecolor{bezel}{HTML}{3A3F47}
+\definecolor{bezellight}{HTML}{6B717B}
+\definecolor{paper}{HTML}{F6F4EF}
+\definecolor{rule}{HTML}{C9CED6}
+
+% ---- Headings, headers ------------------------------------------------------
+\titleformat{\chapter}[display]
+  {\sffamily\color{ink}}
+  {\demifont\large\color{fujired}\MakeUppercase{\chaptertitlename}~\thechapter}
+  {4pt}
+  {\heavyfont\Huge}
+  [\vspace{2pt}{\color{fujired}\rule{0.18\textwidth}{3pt}}]
+\titlespacing*{\chapter}{0pt}{-10pt}{22pt}
+\titleformat{\section}{\sffamily\bfseries\Large\color{ink}}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\sffamily\bfseries\large\color{ink}}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{16pt}{6pt}
+\titlespacing*{\subsection}{0pt}{12pt}{4pt}
+\setcounter{secnumdepth}{1}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyhead[L]{\sffamily\small\color{bezellight}FujiNet Palm Guide}
+\fancyhead[R]{\sffamily\small\color{bezellight}\leftmark}
+\fancyfoot[C]{\sffamily\small\color{ink}\thepage}
+\renewcommand{\chaptermark}[1]{\markboth{#1}{}}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\sffamily\small\color{ink}\thepage}}
+
+\setlist{itemsep=3pt,topsep=4pt,parsep=0pt,partopsep=0pt}
+% A PDF to read on screen: no blank pages to start chapters on the right.
+\let\cleardoublepage\clearpage
+\raggedbottom
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+
+% ---- Pieces ---------------------------------------------------------------
+% A Palm screen, as the emulator saw it, in a small LCD bezel. #1 file, #2 caption.
+\newcommand{\palmshot}[2]{%
+  \begin{minipage}[t]{4.35cm}\centering
+  \begin{tikzpicture}
+    \IfFileExists{build/screens/#1.png}{%
+      \node[inner sep=0] (s) {\includegraphics[width=3.6cm]{build/screens/#1.png}};}{%
+      \node[inner sep=0,minimum size=3.6cm,fill=lcd] (s) {\sffamily\scriptsize #1};}
+    \draw[bezel,line width=5pt,rounded corners=4pt]
+      ($(s.south west)+(-3pt,-3pt)$) rectangle ($(s.north east)+(3pt,3pt)$);
+  \end{tikzpicture}\par\vspace{3pt}
+  {\sffamily\footnotesize\color{ink}#2\par}
+  \end{minipage}}
+
+% Family badges.
+\newcommand{\fnbadge}{\tikz[baseline=(b.base)]\node[fill=classicamber,text=white,rounded corners=2pt,inner xsep=4pt,inner ysep=1.5pt,font=\sffamily\bfseries\footnotesize](b){FN};}
+\newcommand{\fibadge}{\tikz[baseline=(b.base)]\node[fill=nioteal,text=white,rounded corners=2pt,inner xsep=4pt,inner ysep=1.5pt,font=\sffamily\bfseries\footnotesize](b){FI};}
+
+% The title band at the top of an app page. #1 name, #2 one line, #3 badges and creators.
+\newcommand{\appbanner}[3]{%
+  \begin{tcolorbox}[enhanced,colback=navy,colframe=navy,arc=4pt,boxrule=0pt,
+    left=10pt,right=10pt,top=8pt,bottom=8pt,
+    overlay={\foreach \x in {0.55,0.63,...,0.95}{\draw[white,opacity=0.07,line width=0.6pt]
+      ($(frame.north west)!\x!(frame.north east)$) -- ($(frame.south west)!\x!(frame.south east)$);}
+      \fill[white] ($(frame.east)+(-1.3,0.15)$) circle (5pt);
+      \fill[fujired] ($(frame.east)+(-0.9,0.15)$) circle (5pt);
+      \fill[white,opacity=.35] ($(frame.east)+(-1.1,-0.2)$) circle (5pt);}]
+  {\heavyfont\color{white}\LARGE #1}\par\vspace{2pt}
+  {\sffamily\color{white!85!navy}#2}\par\vspace{4pt}
+  {\sffamily\small\color{white}#3}
+  \end{tcolorbox}}
+
+% Side notes.
+\newtcolorbox{tip}[1][Tip]{enhanced,colback=nioteal!7,colframe=nioteal,boxrule=0pt,
+  leftrule=3pt,arc=0pt,left=8pt,right=6pt,top=4pt,bottom=4pt,fonttitle=\sffamily\bfseries,
+  coltitle=nioteal!80!black,colbacktitle=nioteal!7,title={\faLightbulb[regular]\ #1},
+  attach title to upper={\ }}
+\newtcolorbox{warn}[1][Watch out]{enhanced,colback=fujired!6,colframe=fujired,boxrule=0pt,
+  leftrule=3pt,arc=0pt,left=8pt,right=6pt,top=4pt,bottom=4pt,fonttitle=\sffamily\bfseries,
+  coltitle=fujired!80!black,colbacktitle=fujired!6,title={\faExclamationTriangle\ #1},
+  attach title to upper={\ }}
+
+% Code and config listings.
+\newtcolorbox{codebox}{colback=paper,colframe=rule,boxrule=0.5pt,arc=2pt,
+  top=3pt,bottom=3pt,before upper={\setlength{\topsep}{0pt}\setlength{\partopsep}{0pt}\setlength{\parskip}{0pt}}}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+
+\newcommand{\btn}[1]{\tikz[baseline=(b.base)]\node[draw=ink,rounded corners=3pt,inner xsep=3pt,inner ysep=1pt,font=\sffamily\footnotesize](b){#1};}
+\newcommand{\menu}[1]{\textsf{\textbf{#1}}}
+\newcommand{\key}[1]{\texttt{#1}}
+
+\begin{document}
+
+% =========================================================================
+% Cover
+% =========================================================================
+\begin{titlepage}
+\newgeometry{margin=0pt}
+\thispagestyle{empty}
+\begin{tikzpicture}[remember picture,overlay]
+  % Night-sky background with the go-board grid of the FujiNet logo.
+  \shade[top color=navy,bottom color=ink!70!black,middle color=navy!85!nioteal]
+    (current page.south west) rectangle (current page.north east);
+  \begin{scope}[shift={(current page.south west)}]
+    \foreach \x in {0,1.4,...,22}{\draw[white,opacity=0.06,line width=0.5pt] (\x,0) -- (\x,28);}
+    \foreach \y in {0,1.4,...,28}{\draw[white,opacity=0.06,line width=0.5pt] (0,\y) -- (22,\y);}
+    \foreach \x/\y/\c in {20.2/26.2/white,15.4/25.2/fujired,18.2/19.6/white,1.4/12.6/fujired,
+                          19.6/8.4/white,4.2/4.2/white,16.8/2.8/fujired,19.8/14.0/white}{
+      \fill[\c,opacity=0.18] (\x,\y) circle (0.42);}
+  \end{scope}
+
+  % Title.
+  \node[anchor=north west,text=fujired,font=\demifont\Large] at ($(current page.north west)+(1.6,-1.9)$)
+    {FUJINET \textbullet\ PALM OS};
+  \node[anchor=north west,text=white,font=\heavyfont\fontsize{54}{56}\selectfont,align=left]
+    at ($(current page.north west)+(1.5,-2.6)$) {The FujiNet\\Palm Guide};
+  \node[anchor=north west,text=white!80!navy,font=\sffamily\Large,align=left,text width=17cm]
+    at ($(current page.north west)+(1.6,-7.0)$)
+    {HotSync, TNFS and network apps for the Palm in your cradle,\\on FujiNet Classic and FujiNet NIO};
+
+  % The Palm, in its cradle, tilted a little.
+  \begin{scope}[shift={($(current page.south west)+(7.4,6.0)$)},rotate=-6]
+    % cradle
+    \fill[black,opacity=.35] (-0.7,-1.95) ellipse (5.4 and 0.45);
+    \shade[top color=bezellight,bottom color=bezel!70!black,rounded corners=10pt]
+      (-4.4,-1.9) -- (4.4,-1.9) -- (3.9,0.4) -- (-3.9,0.4) -- cycle;
+    \fill[black!70] (-3.3,0.2) rectangle (3.3,0.55);
+    \shade[inner color=white,outer color=bezellight] (2.5,-0.75) circle (0.32);
+    \draw[ink,line width=1.1pt,->] (2.5,-0.75) ++(40:0.18) arc (40:300:0.18);
+    % body
+    \shade[left color=bezel,right color=bezellight,middle color=bezellight!80!white,rounded corners=26pt]
+      (-3.6,0.3) rectangle (3.6,11.6);
+    \draw[white,opacity=.25,line width=1pt,rounded corners=26pt] (-3.6,0.3) rectangle (3.6,11.6);
+    \node[text=white!85!bezel,font=\demifont\small] at (0,11.0) {FujiNet};
+    % screen glass and LCD
+    \fill[black!85,rounded corners=6pt] (-3.0,4.25) rectangle (3.0,10.45);
+    \fill[lcd] (-2.65,4.6) rectangle (2.65,10.1);
+    % Palm OS style title tab
+    \fill[black] (-2.65,9.62) rectangle (0.2,10.1);
+    \node[anchor=west,text=lcd,font=\demifont\footnotesize] at (-2.55,9.86) {FujiNet};
+    \draw[black,line width=1.4pt] (0.2,9.64) -- (2.65,9.64);
+    \node at (0,8.0) {\includegraphics[width=4.7cm]{art/fujinet-logo.pdf}};
+    \node[font=\ttfamily\small,text=black!85,align=center] at (0,6.25)
+      {HotSync \;\textbullet\; TNFS\\ FN Classic \;\textbullet\; FI NIO};
+    \draw[black,line width=0.8pt,rounded corners=2pt] (-2.2,4.85) rectangle (-0.6,5.35);
+    \node[font=\sffamily\scriptsize,text=black] at (-1.4,5.1) {Ping};
+    \draw[black,line width=0.8pt,rounded corners=2pt] (0.6,4.85) rectangle (2.2,5.35);
+    \node[font=\sffamily\scriptsize,text=black] at (1.4,5.1) {HotSync};
+    % Graffiti area
+    \draw[white!70!bezel,line width=0.7pt,rounded corners=3pt] (-2.9,1.95) rectangle (2.9,3.95);
+    \draw[white!70!bezel,line width=0.7pt] (-2.0,2.05) rectangle (-0.05,3.85);
+    \draw[white!70!bezel,line width=0.7pt] (0.05,2.05) rectangle (2.0,3.85);
+    \foreach \y in {2.45,3.4}{\draw[white!70!bezel,line width=0.7pt] (-2.45,\y) circle (0.2);
+                               \draw[white!70!bezel,line width=0.7pt] (2.45,\y) circle (0.2);}
+    % buttons and rocker
+    \foreach \x in {-2.55,-1.45,1.45,2.55}{
+      \shade[inner color=bezellight!60!white,outer color=bezel] (\x,1.15) circle (0.38);}
+    \shade[inner color=bezellight!60!white,outer color=bezel] (0,1.15) ellipse (0.55 and 0.32);
+    \draw[bezel,line width=0.8pt] (-0.5,1.15) -- (0.5,1.15);
+  \end{scope}
+
+  % Serial cable to a FujiNet.
+  \draw[black!80,line width=4pt,rounded corners=30pt]
+    ($(current page.south west)+(11.6,5.6)$) -- ($(current page.south west)+(13.4,4.4)$)
+    -- ($(current page.south west)+(15.5,5.2)$);
+  \begin{scope}[shift={($(current page.south west)+(17.4,5.6)$)}]
+    \shade[top color=fujired!90!white,bottom color=fujired!70!black,rounded corners=6pt]
+      (-2.0,-1.0) rectangle (2.0,1.0);
+    \node[text=white,font=\heavyfont\large] at (0,0.25) {FujiNet};
+    \node[text=white!90!fujired,font=\sffamily\scriptsize] at (0,-0.35) {FN-RS232 \textbullet\ NIO \textbullet\ Classic};
+    \fill[black!70,rounded corners=2pt] (-2.35,-0.35) rectangle (-1.95,0.35);
+    \foreach \y in {-0.6,0,0.6}{\fill[green!70!lcd] (1.6,\y) circle (0.06);}
+  \end{scope}
+
+  % Author and date.
+  \node[anchor=south west,text=white,font=\demifont\Large] at ($(current page.south west)+(1.6,1.9)$)
+    {Andrew Diller};
+  \node[anchor=south west,text=white!75!navy,font=\sffamily\large] at ($(current page.south west)+(1.6,1.2)$)
+    {October 2026};
+  \node[anchor=south east,text=white!60!navy,font=\sffamily\small,align=right]
+    at ($(current page.south east)+(-1.4,1.25)$) {fujinet.online};
+\end{tikzpicture}
+\restoregeometry
+\end{titlepage}
+
+% =========================================================================
+\frontmatter
+\pagestyle{plain}
+\tableofcontents
+\mainmatter
+\pagestyle{fancy}
+
+% =========================================================================
+\chapter{Welcome}
+
+A Palm Pilot already has everything it needs to be a network computer except
+the network. It has a serial port, a cradle, and HotSync, the one-button
+ritual that every Palm owner knows. \textbf{FujiNet} supplies the rest. Put a
+Palm in its serial cradle, run the cradle's cable to a FujiNet, and the same
+wire now does two jobs:
+
+\begin{itemize}
+  \item \textbf{HotSync.} Press the cradle's button and the Palm syncs with
+    FujiNet as it once did with Palm Desktop. FujiNet installs whatever apps
+    and databases are waiting in its install queue, and backs up the Palm's
+    databases to its own storage.
+  \item \textbf{FujiBus.} Apps on the Palm talk to FujiNet directly, at 115200
+    baud, and through it to the internet: game servers, web pages, TNFS file
+    servers, and friends on other Palms.
+\end{itemize}
+
+FujiNet notices which of the two is happening by itself. While an app is
+talking, it leaves the line alone; when the app goes quiet, it listens now and
+then for a Palm's HotSync call.
+
+\section{Two FujiNets, two families of apps}
+
+FujiNet comes in two firmware generations, and this guide covers both:
+
+\begin{description}[font=\sffamily\bfseries,leftmargin=0pt]
+  \item[FujiNet Classic] is the long-running \texttt{fujinet-firmware} that
+    serves Atari, Apple~II, CoCo, Adam and many other machines. Its Palm
+    support lives on the \texttt{palm-demo-fozz} branch. Apps written for it are
+    named \textbf{FN} something, like \textsf{FN Test}. \fnbadge
+  \item[FujiNet NIO] is the new firmware, \texttt{fujinet-nio}, with devices
+    organised as services (network, files, WiFi, HotSync) and a portable C
+    client library, \texttt{fujinet-nio-lib}. Apps written for it are named
+    \textbf{FI} something, like \textsf{FI Test}. \fibadge
+\end{description}
+
+The two families do the same jobs in the same way on the Palm, and look much
+alike; the difference is the FujiNet they expect at the other end of the
+cable. Each FI app has its own creator code, so a Palm can carry both
+families side by side, and the launcher tells them apart by name.
+
+\begin{center}
+\palmshot{fn-launcher}{The FN apps, for FujiNet Classic}\hspace{1.2cm}
+\palmshot{fi-launcher}{The FI apps, for FujiNet NIO}
+\end{center}
+
+\section{The apps at a glance}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabularx}{\textwidth}{@{}l l l L@{}}
+\toprule
+\sffamily\bfseries Classic & \sffamily\bfseries NIO & \sffamily\bfseries Creators & \sffamily\bfseries What it does \\
+\midrule
+FN HotSync & FI Config & \texttt{ADHS} / \texttt{ANHS} & Browse TNFS servers and queue Palm apps for the next HotSync \\
+FN Test & FI Test & \texttt{ADTS} / \texttt{ANTS} & Check the link to FujiNet, and fetch a web page \\
+FN Bounce World & FI Bounce & \texttt{ADBW} / \texttt{ANBW} & A shared bouncing-shapes world on a bounce-world server \\
+FN Lobby & FI Lobby & \texttt{ADLB} / \texttt{ANLB} & Every game server in the FujiNet Game Lobby \\
+FN Texas Hold'em & FI Texas Hold'em & \texttt{ADTH} / \texttt{ANTH} & Multiplayer poker with Atari, Apple and CoCo players \\
+FN FujiPet & FI FujiPet & \texttt{ADFP} / \texttt{ANFP} & A virtual pet that meets other Palms' pets online \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+All twelve run on \textbf{Palm OS 3.1 and later}: the Palm III, IIIx, IIIxe,
+IIIc, V, Vx, VII, VIIx, m100 and their cousins. Chapter~\ref{ch:compat} has the
+details.
+
+% =========================================================================
+\chapter{Classic and NIO}
+\label{ch:diff}
+
+Both firmwares give the Palm the same two services on one cable, HotSync and
+FujiBus, and both share the line the same way. They differ in how FujiNet is
+configured, where it keeps the install queue, and what the apps speak on the
+wire.
+
+\section{Side by side}
+
+{\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\sffamily\bfseries}p{2.6cm} L L@{}}
+\toprule
+ & \fnbadge\ \sffamily\bfseries Classic & \fibadge\ \sffamily\bfseries NIO \\
+\midrule
+Firmware & \texttt{fujinet-firmware}, branch \texttt{palm-demo-fozz}; board
+  \texttt{fujinet-rs232-s3-palm} (FN-RS232) or FujiNet-PC
+  & \texttt{fujinet-nio} with HotSync (pull request \#19); the FN-RS232 ESP32-S3
+  build, or the POSIX build on a computer \\
+Apps & FN \emph{name}, creator \texttt{AD..} & FI \emph{name}, creator \texttt{AN..} \\
+Talking to FujiNet & FujiBus commands from the app's own small client
+  (\texttt{fnlink}); network through the \texttt{N1:} device with devicespecs
+  like \texttt{N1:TCP://host:port/}
+  & \texttt{fujinet-nio-lib}: FujiDevice, NetworkDevice, FileDevice and WiFi
+  services; a lost reply is asked for again and NIO replays it \\
+HotSync settings & \texttt{[HotSync]} in \texttt{fnconfig.ini}, or the web UI's
+  \textsf{Palm HotSync} panel & \texttt{hotsync:} in \texttt{fujinet.yaml}, or
+  \texttt{hotsync.set} and \texttt{hotsync.save} on the console \\
+Install queue & \texttt{/palm/install/} on the SD card & \texttt{hotsync/install/}
+  on the persistent filesystem (the SD card on an FN-RS232) \\
+Backups & \texttt{/palm/backup/\emph{user}/} & \texttt{hotsync/backup/\emph{user}/} \\
+Queueing an app & From the Palm: \textsf{FN HotSync} copies a file from a TNFS
+  host slot. From a computer: WebDAV, \texttt{curl -T app.prc
+  http://fujinet/dav/palm/install/}
+  & From the Palm: \textsf{FI Config} copies a file from a TNFS server. From the
+  console: \texttt{hotsync.fetch http://host/app.prc} \\
+Network HotSync & TCP 14238, and 6416 for emulators & TCP 14238 (NetSync) \\
+Calendar & Copies a Google or iCalendar calendar into the Date Book at each sync
+  & Not yet \\
+Apps on TNFS & \texttt{fujinet.diller.org/PALM/} & \texttt{fujinet.diller.org/NIO/PALM/} \\
+\bottomrule
+\end{tabularx}}
+
+\section{Sharing one cable}
+
+A HotSync begins at 9600 baud, while apps talk at 115200. FujiNet cannot hear
+a 9600-baud call while it is listening at 115200, so both firmwares do the
+same dance:
+
+\begin{enumerate}
+  \item When no app has spoken for a minute, FujiNet starts \emph{listening
+    windows}: it drops the line to 9600 baud for 1.5~seconds, listens for a
+    Palm's HotSync wake-up, then goes back to 115200.
+  \item Any app request holds the windows off for another minute, so a running
+    app is never interrupted.
+  \item Bytes that are not an app request end the wait at once: that is what a
+    pressed HotSync button sounds like at 115200.
+  \item Once the Palm's wake-up is answered, the sync owns the line until it
+    ends, including the switch to a faster rate.
+\end{enumerate}
+
+An app request that lands inside a window gets no answer, so every app
+resends. On NIO, \texttt{fujinet-nio-lib} also wakes the line with a harmless
+request of its own after an idle spell. You will not notice any of this,
+except that the first request after a long pause can take a second longer.
+
+\begin{tip}
+A Palm running an app cannot HotSync, and a Palm that is HotSyncing is not
+running an app. Leave the app (or use its \btn{HotSync} button) before you
+press the cradle button.
+\end{tip}
+
+\section{Which one do I have?}
+
+Run \textsf{FN Test} and \textsf{FI Test} and tap \btn{Ping}. The one that
+says \textsf{FujiNet found!} matches your FujiNet. \textsf{FI Test} also
+reports the board NIO is running on, such as \textsf{POSIX + FujiBus over
+RS-232} for a computer running NIO.
+
+% =========================================================================
+\chapter{Getting set up}
+\label{ch:setup}
+
+\section{Hardware}
+
+\begin{itemize}
+  \item A Palm OS handheld (OS 3.1 or later) and its \textbf{serial} HotSync
+    cradle or HotSync cable, the kind with a DB-9 plug. USB cradles do not
+    work.
+  \item A FujiNet with an RS-232 port: the \textbf{FN-RS232} board, or a
+    computer running FujiNet-PC or FujiNet NIO with a serial port.
+  \item A \textbf{null-modem adapter} between the cradle's DB-9 and the
+    FN-RS232's DB-9. Both ends are wired as a computer would be.
+\end{itemize}
+
+\begin{warn}
+A Palm cradle never raises the RTS/CTS flow-control lines. Build or configure
+FujiNet without hardware flow control, or it will wait forever for permission
+to send. The classic \texttt{fujinet-rs232-s3-palm} board and NIO's default
+\texttt{flow\_control: none} already do.
+\end{warn}
+
+\section{FujiNet Classic}
+
+Flash the \texttt{fujinet-rs232-s3-palm} build of the \texttt{palm-demo-fozz}
+branch. HotSync is on by default; its settings are in \texttt{fnconfig.ini}
+and in the web UI's \textsf{Palm HotSync} panel:
+
+\begin{codebox}
+\begin{verbatim}
+[HotSync]
+enabled=1
+user=FujiNet          ; given to a Palm that has never synced
+backup=flagged        ; none | flagged | all
+netsync_port=14238    ; 0 turns it off
+serial_port=bus       ; the cradle shares the RS-232 bus line
+\end{verbatim}
+\end{codebox}
+
+An SD card is required: the queue is \texttt{/palm/install/}, installed files
+move to \texttt{/palm/installed/}, and backups go to
+\texttt{/palm/backup/\emph{user}/}. Classic can also fill the Palm's Date Book
+from a Google or iCalendar calendar at each sync (\texttt{calendar=GCAL:///}
+or \texttt{ICAL://host/feed.ics}).
+
+\section{FujiNet NIO}
+
+HotSync is off by default. Turn it on in \texttt{fujinet.yaml}, or from the
+diagnostics console, and restart:
+
+\begin{codebox}
+\begin{verbatim}
+hotsync:
+  enabled: true
+  cradle: true         # a Palm cradle shares the FujiBus serial line
+  port: 14238          # NetSync TCP port; 0 turns it off
+  root: /hotsync       # folder on the persistent filesystem
+  user_name: FujiNet   # given to a Palm that has never synced
+  backup: flagged      # none | flagged | all
+\end{verbatim}
+\end{codebox}
+
+\begin{codebox}
+\begin{verbatim}
+hotsync.set enabled 1
+hotsync.set cradle 1
+hotsync.save
+hotsync.status        # is it listening? what did the last sync do?
+\end{verbatim}
+\end{codebox}
+
+\section{Installing the apps}
+
+The first app has to arrive by HotSync, so put it in the install queue and
+press the cradle button. After that, \textsf{FN HotSync} or \textsf{FI
+Config} can queue the rest from the Palm itself. The builds are on the TNFS
+server \texttt{fujinet.diller.org}: the FN apps in \texttt{/PALM/}, the FI apps
+in \texttt{/NIO/PALM/}.
+
+\begin{description}[font=\sffamily\bfseries,leftmargin=0pt]
+  \item[Classic] Copy the \texttt{.prc} to \texttt{/palm/install/} on the SD
+    card, or send it over WebDAV:\\
+    \texttt{curl -T FN-HotSync.prc http://fujinet.local/dav/palm/install/}
+  \item[NIO] Serve the \texttt{.prc} from any computer and fetch it from the
+    console:\\
+    \texttt{python3 -m http.server 8000} \quad (on the computer)\\
+    \texttt{hotsync.fetch http://192.168.1.5:8000/FI-Config.prc} \quad (on NIO)
+\end{description}
+
+Then press the cradle's HotSync button. The Palm shows its HotSync screen,
+FujiNet installs the queued files and moves them to \texttt{installed/}, and
+the new icons appear in the launcher.
+
+\begin{center}
+\palmshot{fi-hotsync}{A cradle HotSync with NIO installing a queued app}
+\end{center}
+
+% =========================================================================
+\chapter{Palm OS versions}
+\label{ch:compat}
+
+Every app runs on Palm OS 3.1 and later. Palm OS 3.3 brought a new Serial
+Manager; on 3.1 and 3.2 the apps (and \texttt{fujinet-nio-lib}) fall back to
+the older serial library, which does the same job. An app started on Palm OS
+3.0 or earlier says \textsf{This app needs Palm OS 3.1 or later} and quits.
+
+FN FujiPet and FI FujiPet draw in 256 colours on a colour Palm running OS 3.5
+or later, and in black and white with a grey dither everywhere else. The other
+apps are black and white on every Palm.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}l l l l@{}}
+\toprule
+\sffamily\bfseries Palm OS & \sffamily\bfseries Devices & \sffamily\bfseries Serial & \sffamily\bfseries Tested \\
+\midrule
+3.0 & Palm III & --- & the apps refuse to start \\
+3.1 & Palm IIIx, Palm V & serial library & emulator: all twelve apps \\
+3.2 & Palm VII & serial library & no ROM available \\
+3.3 & Palm III, V (upgraded) & Serial Manager & emulator, and a real Palm in a cradle \\
+3.5 & IIIxe, IIIc, Vx, VIIx, m100 & Serial Manager & emulator (V, VIIx, m100) \\
+4.x & m500, m505, IIIc & Serial Manager & emulator (IIIc) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{tip}[Newer Palms]
+Palms from the m500 series onward use a different cradle connector, and their
+serial cradles are rare. Anything with Palm OS 3.1 or later and a serial
+cradle works.
+\end{tip}
+
+% =========================================================================
+\chapter{The apps}
+\label{ch:apps}
+
+Each app has a page of its own. Where the FN and FI versions differ, the page
+says how; otherwise everything on it holds for both.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.6}
+\begin{tabularx}{\textwidth}{@{}l l X r@{}}
+\toprule
+\sffamily\bfseries \fnbadge\ Classic & \sffamily\bfseries \fibadge\ NIO & \sffamily\bfseries For & \sffamily\bfseries Page \\
+\midrule
+FN HotSync & & queueing apps from TNFS host slots & \pageref{app:fnhotsync} \\
+ & FI Config & queueing apps from TNFS servers & \pageref{app:ficonfig} \\
+FN Test & FI Test & checking the cradle link & \pageref{app:test} \\
+FN Bounce World & FI Bounce & a shared bouncing world & \pageref{app:bounce} \\
+FN Lobby & FI Lobby & the FujiNet Game Lobby & \pageref{app:lobby} \\
+FN Texas Hold'em & FI Texas Hold'em & multiplayer poker & \pageref{app:holdem} \\
+FN FujiPet & FI FujiPet & a virtual pet with friends & \pageref{app:fujipet} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{tip}[Finding them]
+New apps land in the launcher's \textsf{Unfiled} category. Pick
+\textsf{Unfiled} or \textsf{All} from the category list at the top right of
+the launcher to see them.
+\end{tip}
+
+\input{apps}
+
+% =========================================================================
+\chapter{When things go wrong}
+
+\begin{description}[font=\sffamily\bfseries\color{fujired},leftmargin=0pt,style=nextline,itemsep=8pt]
+  \item[\textsf{No answer from FujiNet. Is the cradle cabled to it?}]
+    The app sent its request several times and heard nothing. Check the
+    null-modem adapter, that FujiNet is running, that it was built without
+    hardware flow control, and that you are running the right family: FN apps
+    with Classic, FI apps with NIO.
+  \item[\textsf{This app needs Palm OS 3.1 or later}]
+    The Palm runs Palm OS 3.0 or earlier.
+  \item[The HotSync button does nothing]
+    Quit any FujiNet app first. Check that HotSync is on: on NIO,
+    \texttt{hotsync.status} should say \texttt{enabled: 1} and
+    \texttt{listening: 1}; on Classic, \texttt{[HotSync] enabled=1} with
+    \texttt{serial\_port=bus}. Give it a few seconds: FujiNet listens in
+    windows.
+  \item[A queued app did not install]
+    Look in the queue (\btn{Queue} in FN HotSync or FI Config). On NIO,
+    \texttt{hotsync.status} reports \texttt{last\_installed} and
+    \texttt{last\_install\_failures}. A copy that FI Config could not finish is
+    refused by HotSync; queue it again.
+  \item[FujiPet says \textsf{No friend server}]
+    Check the server's \textsf{host:port} in \menu{Options > Settings}. A
+    computer running NIO on a Mac connects to the IPv6 address for
+    \texttt{localhost}, so start the friend server with \texttt{-{}-host \char34\char34}, or
+    give its IPv4 address.
+  \item[A FujiNet-PC on a Mac drops requests]
+    FujiNet-PC builds before the \texttt{[pc]} serial fix left the terminal's
+    extended input processing on, which swallows bytes \texttt{0x16} and
+    \texttt{0x0F} in a packet. Use a build with the fix.
+\end{description}
+
+% =========================================================================
+\appendix
+\chapter{For developers}
+
+\section{Building}
+
+The apps live in \texttt{github.com/dillera/fujinet-palm}: the FN apps on the
+\texttt{classic} branch, the FI apps on \texttt{nio}. They build with
+prc-tools-remix and PilRC in a Docker image:
+
+\begin{codebox}
+\begin{verbatim}
+make image    # once: the palmdev toolchain image
+make          # every app, apps/*/*.prc
+make test     # desktop tests of the shared C code
+make traps    # Palm OS calls newer than 3.1, per app
+\end{verbatim}
+\end{codebox}
+
+On \texttt{nio}, \texttt{make} also builds \texttt{fujinet-nio-lib}'s
+\texttt{palm} target from \texttt{../fujinet-nio-workspace}. An FI app sets
+\texttt{NIO = 1} in its Makefile; \texttt{fn\_read} never blocks, so poll it
+from the event loop, and when a reply is lost ask again at the same offset.
+
+\section{Testing in an emulator}
+
+\texttt{assets/} holds Palm OS ROMs and CloudpilotEmu images with Setup done,
+for Palm OS 3.1, 3.3, 3.5 and 4.0, and the patch that gives CloudpilotEmu a
+\texttt{-{}-serial} option and scripting commands. \texttt{tools/rig.sh} joins
+an emulated Palm's cradle to FujiNet-PC or to FujiNet NIO through a pair of
+pseudo-terminals:
+
+\begin{codebox}
+\begin{verbatim}
+cp assets/images/palm-m100-os3.5.1.img runs/t/palm.img
+tools/rig.sh start runs/t runs/t/palm.img nio
+tools/rig.sh cmd runs/t install $PWD/apps/FujiNetTest/FujiNetTest.prc
+tools/rig.sh cmd runs/t launch 'FI\ Test'
+tools/rig.sh cmd runs/t tap 40 147
+tools/rig.sh cmd runs/t screenshot ping.png
+\end{verbatim}
+\end{codebox}
+
+Every screen in this guide was taken that way.
+
+\end{document}

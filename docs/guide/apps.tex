@@ -1,0 +1,334 @@
+% One page per app; \input by fujinet-palm-guide.tex.
+
+% ---------------------------------------------------------------------------
+\newpage
+\section{FN HotSync}\label{app:fnhotsync}
+\appbanner{FN HotSync}{Browse FujiNet's host slots and queue Palm apps for the next HotSync}
+  {\fnbadge\quad creator \texttt{ADHS}\quad FujiNet Classic}
+
+FN HotSync is the Palm's own window on FujiNet Classic's host slots: the
+same eight slots an Atari or Apple sees in CONFIG, one of them FujiNet's SD
+card and the rest TNFS servers. Browse a server, pick a Palm app or database,
+and FN HotSync has FujiNet copy it into \texttt{/palm/install/} on the SD card.
+The next HotSync installs it.
+
+\begin{center}
+\palmshot{fn-hotsync-main}{The host slots}\hfill
+\palmshot{fn-hotsync-browse}{Browsing \texttt{/PALM/} on a TNFS server}\hfill
+\palmshot{fn-hotsync-queue}{Queue a file for HotSync}
+\end{center}
+
+\begin{multicols}{2}
+\subsection*{Using it}
+\begin{itemize}
+  \item Pick a host slot and tap \btn{Browse}. Folders end in \texttt{/}: select
+    one and tap \btn{Open} to go in, \btn{Up} to come back out.
+  \item Select a \texttt{.prc}, \texttt{.pdb} or \texttt{.pqa} file and tap
+    \btn{Open}; confirm with \btn{Queue}. FujiNet copies it to the SD card.
+  \item \btn{Queue} on the main screen lists what is waiting;
+    \btn{HotSync Now} there starts the sync.
+  \item \btn{Edit} names a slot: \texttt{SD} for FujiNet's card, or a TNFS
+    server such as \texttt{apps.irata.online}. FujiNet saves the slots.
+  \item \btn{Info} shows FujiNet's WiFi network, IP address and firmware
+    version.
+  \item \btn{HotSync} closes the cradle port and opens the Palm's HotSync
+    app, ready to sync.
+\end{itemize}
+
+\subsection*{Good to know}
+\begin{itemize}
+  \item Queued files go to the slot named \texttt{SD}; without one, FN
+    HotSync says so.
+  \item The copy runs on FujiNet, server to SD card, so even a large app
+    takes only a moment.
+  \item A queued file stays until a HotSync installs it; the Palm cannot take
+    it back out of the queue.
+  \item The NIO version of this app is FI Config, on the next page.
+\end{itemize}
+\end{multicols}
+
+\begin{center}
+\palmshot{fn-hotsync-edit}{Naming a host slot}\hfill
+\palmshot{fn-hotsync-queued}{What is waiting for the next sync}\hfill
+\palmshot{fn-hotsync-info}{FujiNet's network}
+\end{center}
+
+% ---------------------------------------------------------------------------
+\newpage
+\section{FI Config}\label{app:ficonfig}
+\appbanner{FI Config}{Browse TNFS servers and queue Palm apps for HotSync through FujiNet NIO}
+  {\fibadge\quad creator \texttt{ANHS}\quad FujiNet NIO}
+
+FI Config is FN HotSync rebuilt for FujiNet NIO. NIO has no host slots, so
+FI Config keeps its own list of eight TNFS servers, starting with
+\texttt{fujinet.diller.org} and \texttt{apps.irata.online}. Browse one, pick
+an app, and FI Config copies it through NIO's file service into
+\texttt{hotsync/install/}, ready for the next HotSync.
+
+\begin{center}
+\palmshot{fi-config-main}{The TNFS servers}\hfill
+\palmshot{fi-config-browse}{Browsing a server}\hfill
+\palmshot{fi-config-progress}{Copying into the queue}
+\end{center}
+
+\begin{multicols}{2}
+\subsection*{Using it}
+\begin{itemize}
+  \item Pick a server and tap \btn{Browse}; \btn{Open} goes into a folder or
+    picks a file, \btn{Up} goes back.
+  \item Opening a \texttt{.prc}, \texttt{.pdb} or \texttt{.pqa} asks whether
+    to queue it. The copy shows its progress on the line above the list.
+  \item \btn{Queue} lists the files waiting in NIO's install folder.
+  \item \btn{Edit} changes a server's name; clear it to empty the slot. The
+    list lives in the app's own preferences.
+  \item \btn{Info} shows NIO's WiFi network, IP address, firmware and board,
+    and how many replies were asked for again.
+  \item \btn{HotSync} hands the cradle back and opens the HotSync app.
+\end{itemize}
+
+\subsection*{Good to know}
+\begin{itemize}
+  \item The Palm does the copying, a few hundred bytes at a time, so a 30~KB
+    app takes about half a minute over TNFS.
+  \item If a copy is cut short, HotSync refuses the half-written file rather
+    than installing a broken app: queue it again to replace it.
+  \item A reply lost on the cable is simply asked for again; Info counts how
+    often that happened.
+  \item On NIO's console, \texttt{hotsync.fetch} queues an app over HTTP
+    without the Palm.
+\end{itemize}
+\end{multicols}
+
+\begin{center}
+\palmshot{fi-config-queued}{The install queue}\hfill
+\palmshot{fi-config-info}{NIO's firmware and network}\hfill
+\palmshot{fi-hotsync-log}{The HotSync log: installed}
+\end{center}
+
+% ---------------------------------------------------------------------------
+\newpage
+\section{FN Test and FI Test}\label{app:test}
+\appbanner{FN Test \textbullet\ FI Test}{Is FujiNet there? A one-tap check of the cradle link}
+  {\fnbadge\ \texttt{ADTS}\qquad \fibadge\ \texttt{ANTS}}
+
+The first app to run on a new setup. \btn{Ping} sends FujiNet one request
+and shows what comes back. If it says \textsf{FujiNet found!}, the cradle,
+the cable, the null-modem adapter and the firmware are all doing their job,
+and every other app will work too.
+
+\begin{center}
+\palmshot{fn-test}{FN Test finds FujiNet Classic}\hfill
+\palmshot{fi-test-ping}{FI Test finds FujiNet NIO}\hfill
+\palmshot{fi-test-fetch}{FI Test fetches a web page}
+\end{center}
+
+\begin{multicols}{2}
+\subsection*{FN Test}
+\btn{Ping FujiNet} asks FujiNet Classic for its adapter configuration and
+shows the firmware version, FujiNet's IP address and the WiFi network it is
+on.
+
+\subsection*{FI Test}
+\begin{itemize}
+  \item \btn{Ping} asks NIO for its version and board (FujiDevice), then
+    for its WiFi status and settings.
+  \item \btn{Fetch} gets \texttt{http://example.com/} through NIO's network
+    service and shows the HTTP status, the size and the page's title: proof
+    that the Palm can reach the internet.
+\end{itemize}
+
+\columnbreak
+\subsection*{If it fails}
+\textsf{No answer from FujiNet} means nothing came back after several tries.
+Check the cable and adapter, and that you are running the right app for your
+FujiNet: FN Test for Classic, FI Test for NIO. Chapter~\ref{ch:diff} explains
+the difference.
+
+\begin{tip}
+Right after a HotSync, or after a long pause, the first ping can take a
+second longer: FujiNet may be listening for a HotSync at that moment, and the
+app simply asks again.
+\end{tip}
+\end{multicols}
+
+% ---------------------------------------------------------------------------
+\newpage
+\section{Bounce World}\label{app:bounce}
+\appbanner{FN Bounce World \textbullet\ FI Bounce}{Shapes bouncing across a world shared by every connected machine}
+  {\fnbadge\ \texttt{ADBW}\qquad \fibadge\ \texttt{ANBW}}
+
+A client for Mark Fisher's \textsf{bounce-world} server. Every machine that
+connects (an Atari, a C64, a Palm) gets a window onto one shared world, and
+the shapes in it bounce from screen to screen. The Palm draws its part of the
+world in block graphics, polling the server several times a second, which
+also makes it a fine workout for the cradle link.
+
+\begin{center}
+\palmshot{fn-bounce-connect}{Connecting to a server}\hfill
+\palmshot{fi-bounce-world}{The world in motion}\hfill
+\palmshot{fi-bounce-info}{FI Bounce's link counters}
+\end{center}
+
+\begin{multicols}{2}
+\subsection*{Using it}
+Enter the \textsf{Server} and \textsf{Port} (9003 for the framed protocol of
+bounce-world 2.3 and later) and a \textsf{Name} of up to 8 letters, then tap
+\btn{Connect}. FI
+Bounce starts with \texttt{bouncy.diller.org}; FN Bounce World with
+\texttt{localhost}, for FujiNet-PC.
+
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+\btn{Frz} \key{F} & freeze or unfreeze the world, for everyone \\
+\btn{Rst} \key{R} & reset it \\
+\btn{+} \btn{-} & faster, slower (also the scroll keys) \\
+\btn{Add} \key{1}--\key{5} & add a body of that size \\
+\btn{Who} \key{W} & who else is connected \\
+\btn{Info} \key{I} & your name, clients, world size and bodies \\
+\key{Q} & disconnect \\
+\end{tabularx}
+
+While you are in the world the app buttons play too: 1 freezes, 2 adds a
+body, 3 shows who, 4 shows info.
+
+\subsection*{FI Bounce's counters}
+FI Bounce's Info adds a line of link statistics: requests, exchanges with
+NIO, retries and replies lost. A long run with no losses is a healthy cable.
+
+\begin{warn}[Known issue]
+The world keeps drawing while the \menu{World} menu is open, so the menu
+shows as a blank box. Its items still work, but the buttons and Graffiti keys
+are easier.
+\end{warn}
+\end{multicols}
+
+% ---------------------------------------------------------------------------
+\newpage
+\section{Lobby}\label{app:lobby}
+\appbanner{FN Lobby \textbullet\ FI Lobby}{Every game server in the FujiNet Game Lobby, in your pocket}
+  {\fnbadge\ \texttt{ADLB}\qquad \fibadge\ \texttt{ANLB}}
+
+The FujiNet Game Lobby lists the multiplayer games FujiNet machines can
+join: Battleship, 5 Card Stud, Texas Hold'em and many more, with who is
+playing and from which platforms. The Lobby app reads the whole list,
+\texttt{/viewFull} from \texttt{lobby.fujinet.online}, and shows it on the
+Palm.
+
+\begin{center}
+\palmshot{fi-lobby-loading}{Reading the lobby}\hfill
+\palmshot{fn-lobby-list}{Every server, by game}\hfill
+\palmshot{fn-lobby-detail}{One server in detail}
+\end{center}
+
+\begin{multicols}{2}
+\subsection*{Using it}
+\begin{itemize}
+  \item The list loads when the app starts. Each row is a game, a server
+    and its players, such as \textsf{0/4}.
+  \item Tap a row for the server's status, region, players, app key and URL,
+    and the platforms it serves with the client URL for each. The scroll keys
+    page through it.
+  \item \btn{Refresh} reads the list again.
+  \item \menu{Lobby > Use QA Lobby} switches to the test lobby, for
+    developers; choose it again to go back.
+\end{itemize}
+
+\subsection*{Good to know}
+\begin{itemize}
+  \item The reply is about 30~KB of JSON, more than a Palm would like to hold
+    at once. The app reads it as it streams in, keeping only what it shows,
+    up to 48 servers.
+  \item FI Lobby stays usable while the list loads: the menus, Refresh and
+    Details all answer straight away.
+\end{itemize}
+\end{multicols}
+
+% ---------------------------------------------------------------------------
+\newpage
+\section{Texas Hold'em}\label{app:holdem}
+\appbanner{FN Texas Hold'em \textbullet\ FI Texas Hold'em}{Multiplayer poker, at the same tables as Atari, Apple II and CoCo players}
+  {\fnbadge\ \texttt{ADTH}\qquad \fibadge\ \texttt{ANTH}}
+
+A Palm client for the FujiNet Texas Hold'em server, listed in the Game Lobby.
+Sit at a table with AI players or with friends on other machines; the server
+deals and runs every rule, and the Palm shows the felt, the cards and the
+moves you can make.
+
+\begin{center}
+\palmshot{fn-holdem-setup}{Pick a name and a table}\hfill
+\palmshot{fn-holdem-table}{Your move}\hfill
+\palmshot{fi-holdem-showdown}{The showdown}
+\end{center}
+
+\begin{multicols}{2}
+\subsection*{Using it}
+\begin{itemize}
+  \item Enter a \textsf{Name} (up to 8 letters and digits). The tables on the
+    \textsf{Server} are listed with their players; pick one (or type its name
+    under \textsf{Table}) and tap \btn{Sit Down}.
+  \item Your two cards sit beside the board; the other players are above, face
+    down until the showdown.
+  \item On your turn the moves appear along the bottom with the server's
+    clock. Tap one, or pick one with the scroll keys and press any app button.
+  \item Graffiti works too: \key{f} fold, \key{c} check or call, \key{b} bet,
+    \key{r} raise, \key{a} all-in.
+  \item Tap the status line, or \menu{Table > Last Result}, for the last
+    hand. \menu{Table > Leave Table} gives up your seat.
+\end{itemize}
+
+\subsection*{Good to know}
+\begin{itemize}
+  \item The default server is \texttt{th.carr-designs.com}. A lobby address
+    that ends in \texttt{?table=den} can be typed as the server, and the table
+    is taken from it.
+  \item The cards are the Apple~II client's art, which needs no colour; the
+    small cards are the Atari Lynx client's.
+  \item Leaving the app, or switching to another, leaves the table for you.
+\end{itemize}
+\end{multicols}
+
+% ---------------------------------------------------------------------------
+\newpage
+\section{FujiPet}\label{app:fujipet}
+\appbanner{FN FujiPet \textbullet\ FI FujiPet}{A virtual pet that grows up like the 1996 original, and makes friends online}
+  {\fnbadge\ \texttt{ADFP}\qquad \fibadge\ \texttt{ANFP}}
+
+Name your pet and pick a Cat, Dog, Bunny or Dino; the egg hatches five
+minutes later. It grows from baby to child, teen and adult over a few days,
+and how well it is looked after decides what it grows into and how long it
+lives. With \textsf{Meet friends online} on, it keeps a connection to a
+FujiPet friend server and can chat with pets on other Palms.
+
+\begin{center}
+\palmshot{fn-fujipet-new}{A new egg}\hfill
+\palmshot{fn-fujipet-main}{All grown up, in colour}\hfill
+\palmshot{fn-fujipet-friends}{Friends online}
+\end{center}
+
+\begin{multicols}{2}
+\subsection*{Looking after it}
+The eight icons are the original's. Along the top: \textbf{Feed} (a meal
+fills a hunger heart, a snack a happy one), \textbf{Light}, \textbf{Play}
+(guess which way it will look, three of five to win) and \textbf{Medicine}.
+Along the bottom: \textbf{Clean}, \textbf{Status}, \textbf{Scold} and
+\textbf{Friends}. Tap the pet itself to make it happy. A heart running empty makes it call
+(the \textsf{!} in the corner); a call left for 15 minutes is a care mistake.
+Mess and too many sweets make it sick. The pet lives on while the app is
+closed, and catches up when you return.
+
+\subsection*{Friends}
+\btn{Register} adds your pet to the friend server. The Friends screen lists
+the pets there, online ones first in bold; pick one, choose one of eight
+messages under \textsf{Say} and tap \btn{Send}. It pops up as a bubble on
+their Palm at once, and a kind one cheers their pet up.
+
+\subsection*{Settings}
+\menu{Options > Settings} sets the friend server (\textsf{host:port}), turns
+going online and sounds on or off, and runs time \textsf{Fast} (a pet minute
+a second) or \textsf{Turbo} (a pet day a minute) to watch it grow up.
+\end{multicols}
+
+\begin{center}
+\palmshot{fn-fujipet-status}{Status: hearts, age and weight}\hfill
+\palmshot{fi-fujipet-message}{A message from a friend}\hfill
+\palmshot{fn-fujipet-mono}{In greys on a Palm V}
+\end{center}
