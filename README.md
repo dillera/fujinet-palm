@@ -1,11 +1,13 @@
 # fujinet-palm
 
 Palm OS apps that talk to a [FujiNet](https://fujinet.online), and the tools
-to build them.
+to build them. This branch holds the **FN** apps, for the classic
+fujinet-firmware; the **FI** apps, rebuilt for FujiNet NIO, are on the `nio`
+branch.
 
 A Palm sits in its serial HotSync cradle, wired through a null modem to a
-FujiNet running the HotSync service from the `palm-pilot` branch of
-[fujinet-firmware](https://github.com/dillera/fujinet-firmware/tree/palm-pilot)
+FujiNet running the HotSync service from the `palm-demo-fozz` branch of
+[fujinet-firmware](https://github.com/dillera/fujinet-firmware/tree/palm-demo-fozz)
 (for example the `fujinet-rs232-s3-palm` build for the FN-RS232). FujiNet then
 serves the Palm two ways on the same port:
 
