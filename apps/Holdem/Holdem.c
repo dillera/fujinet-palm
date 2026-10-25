@@ -1,19 +1,23 @@
-/* FN Texas Hold'em for Palm OS.
+/* FI Texas Hold'em for Palm OS.
  *
  * A client for the FujiNet Texas Hold'em server, the same one the Apple II,
  * Atari, CoCo, MS-DOS and Intellivision clients of
  * github.com/dillera/fujinet-texasHoldEm play against. Like the Apple II
  * client, it asks for the server's packed binary state (bin=1, here with
- * be=1 for big-endian numbers) through FujiNet's N1: device as a plain HTTP
- * GET, polls it about once a second, and plays the two-letter move codes the
- * server offers; every poker rule is the server's. See common/holdem.h.
+ * be=1 for big-endian numbers) as a plain HTTP GET, through a FujiNet NIO on
+ * the cradle (fujinet-nio-lib), polls it about once a second, and plays the
+ * two-letter move codes the server offers; every poker rule is the server's.
+ * See common/holdem.h.
+ *
+ * A GET runs alongside the event loop, one exchange with FujiNet at a time,
+ * so the table keeps its clock and the pen while the server answers.
  *
  * The cards are the Apple II client's hi-res art, the small cards the Atari
  * Lynx client's sprites, both converted by tools/make_cards.py.
  */
 #include <PalmOS.h>
 
-#include "fnnet.h"
+#include "fujinet-nio.h"
 #include "holdem.h"
 #include "cards.h"
 #include "HoldemRsc.h"
@@ -26,8 +30,13 @@
 #define DEFAULT_TABLE  "ai2"
 #define SERVER_LEN 64
 #define URL_LEN 160
+/* hs_build_url starts each URL with the classic "N1:", which NIO does not take. */
+#define URL_SKIP 3
 
-#define NET_UNIT 1
+/* Largest READ; with its header it fits the library's 512-byte packet. */
+#define NET_CHUNK 256
+/* A lost reply is asked for again this many times in all. */
+#define NET_TRIES 3
 #define FIRST_STATUS_TICKS (SysTicksPerSecond() * 15)
 #define STALL_TICKS (SysTicksPerSecond() * 10)
 #define READ_POLL_TICKS (SysTicksPerSecond() / 20)
@@ -40,9 +49,20 @@
 #define heErrBadReply (appErrorClass | 0x11)
 #define heErrTooLong  (appErrorClass | 0x12)
 #define heErrNoTable  (appErrorClass | 0x13)
+/* A fujinet-nio-lib error, in the low byte. */
+#define heErrNio      (appErrorClass | 0x100)
+/* An HTTP status other than 2xx, in the low 12 bits. */
+#define heErrHttp     (appErrorClass | 0x1000)
 
 /* Posted once a form is drawn, to start its first fetch. */
 #define fetchEvent firstUserEvent
+
+/* What the GET in flight is for; its reply goes to the matching ...Done. */
+#define REQ_NONE   0
+#define REQ_TABLES 1
+#define REQ_STATE  2
+#define REQ_MOVE   3
+#define REQ_LEAVE  4
 
 typedef struct {
     char name[HS_NAME_LEN];
@@ -74,6 +94,15 @@ static char gUrl[URL_LEN];
 static char gStatus[48];
 static WinHandle gOffscreen;
 
+/* The GET in flight: its handle, the reply read so far, and when FujiNet
+ * last gave it anything. */
+static UInt8 gReq = REQ_NONE;
+static fn_handle_t gHandle = FN_INVALID_HANDLE;
+static Boolean gGotInfo;        /* its HTTP status is in */
+static UInt16 gReplyLen;
+static UInt32 gLastHeard, gNextStep;
+static UInt8 gTries;
+
 static Boolean gSeated;         /* at the table form, polling */
 static Boolean gHaveGame;       /* gGame holds a state */
 static Boolean gMyTurn;         /* waiting for this player's move */
@@ -92,128 +121,193 @@ static PicBitmap gPic;
 
 /* ---- Errors ---------------------------------------------------------- */
 
-static void ErrorText(Err err, UInt8 ndevErr, char *out)
+static void ErrorText(Err err, char *out)
 {
-    if (err == fnErrNoReply)
+    if (err == (heErrNio | FN_ERR_TIMEOUT))
         StrCopy(out, "No answer from FujiNet. Is the cradle cabled to it?");
-    else if (err == fnErrRefused)
-        StrCopy(out, "FujiNet refused the request.");
-    else if (err == fnErrTooBig)
+    else if (err == (heErrNio | FN_ERR_IO))
+        StrCopy(out, "FujiNet could not reach the server. Is its WiFi up, and the server "
+                     "address right?");
+    else if (err == (heErrNio | FN_ERR_URL_TOO_LONG))
         StrCopy(out, "The server address is too long.");
+    else if ((err & 0xFF00) == heErrNio)
+        StrPrintF(out, "FujiNet: %s.", fn_error_string((uint8_t)err));
+    else if ((err & 0xF000) == heErrHttp)
+        StrPrintF(out, "The server answered HTTP %u. Is the server address right?",
+                  err & 0x0FFF);
     else if (err == heErrTimeout)
         StrCopy(out, "The server stopped sending.");
     else if (err == heErrBadReply || err == heErrTooLong)
         StrCopy(out, "The server's reply was not a Hold'em state. Check the server address.");
     else if (err == heErrNoTable)
         StrCopy(out, "The server has no such table.");
-    else if (err == errNone && ndevErr != 0)
-        StrPrintF(out, "FujiNet network error %d. Is its WiFi up, and the server address right?",
-                  ndevErr);
     else
         StrPrintF(out, "Error %x.", err);
 }
 
-static void ShowError(const char *what, Err err, UInt8 ndevErr)
+static void ShowError(const char *what, Err err)
 {
     char detail[96];
 
-    ErrorText(err, ndevErr, detail);
+    ErrorText(err, detail);
     FrmCustomAlert(MessageAlert, what, "\n", detail);
 }
 
-/* ---- HTTP through N1: ------------------------------------------------ */
+/* ---- HTTP through FujiNet NIO ----------------------------------------- */
 
-/* One GET of gUrl into gReply. *ndevErr is FujiNet's status code when the
- * request ended badly (an HTTP error, or no network). */
-static Err HttpGet(UInt16 *len, UInt8 *ndevErr)
+/* A library result as an Err, for ErrorText. */
+static Err NioErr(uint8_t result)
 {
-    FnNetStatus status;
-    UInt32 last;
-    UInt16 want, got;
-    Err err;
-
-    *len = 0;
-    *ndevErr = 0;
-    err = FnNetOpen(NET_UNIT, gUrl, FN_NET_HTTP_GET, FN_NET_TRANS_NONE);
-    if (err != errNone)
-        return err;
-    err = FnNetGetStatusWait(NET_UNIT, &status, FIRST_STATUS_TICKS);
-    last = TimGetTicks();
-    while (err == errNone) {
-        EvtResetAutoOffTimer();
-        if (status.avail > 0) {
-            want = sizeof(gReply) - *len;
-            if (want == 0) {
-                err = heErrTooLong;
-                break;
-            }
-            if (want > status.avail)
-                want = status.avail;
-            if (want > FN_NET_CHUNK)
-                want = FN_NET_CHUNK;
-            if ((err = FnNetRead(NET_UNIT, gReply + *len, want, &got)) != errNone)
-                break;
-            *len += got;
-            last = TimGetTicks();
-        } else if (!status.connected) {
-            if (status.error != FN_NET_OK && status.error != FN_NET_EOF)
-                *ndevErr = status.error;
-            break;
-        } else if (TimGetTicks() - last > STALL_TICKS) {
-            err = heErrTimeout;
-            break;
-        } else {
-            SysTaskDelay(READ_POLL_TICKS);
-        }
-        err = FnNetGetStatus(NET_UNIT, &status);
-    }
-    FnNetClose(NET_UNIT);
-    return err;
+    return result == FN_OK ? errNone : (heErrNio | result);
 }
 
-/* A GET of a game call (state, move/XX, leave) into gGame. A READ is sent
- * once (see fnnet.h), so a lost one spoils the whole reply; that is tried
- * once more. */
-static Err GameCall(const char *path, UInt8 *ndevErr)
+/* A reply lost on the cradle line, or cut short on it. */
+static Boolean LostReply(uint8_t result)
 {
-    UInt16 len, attempt;
-    Err err = errNone;
+    return result == FN_ERR_TIMEOUT || result == FN_ERR_TRANSPORT || result == FN_ERR_IO;
+}
 
-    *ndevErr = 0;
-    if (!hs_build_url(gUrl, sizeof(gUrl), gPrefs.server, path, gPrefs.table, gPrefs.name))
-        return fnErrTooBig;
-    for (attempt = 0; attempt < 2; attempt++) {
-        err = HttpGet(&len, ndevErr);
-        if (err != fnErrNoReply)
+/* Drops the GET in flight, if any. */
+static void CancelGet(void)
+{
+    if (gHandle != FN_INVALID_HANDLE)
+        fn_close(gHandle);
+    gHandle = FN_INVALID_HANDLE;
+    gReq = REQ_NONE;
+}
+
+/* Opens a GET of the server's path for req; StepGet then reads its reply
+ * into gReply. An OPEN whose reply was lost is sent again; a handle NIO
+ * opened for the lost one is the least recently used, so ALLOW_EVICT gives
+ * it back. */
+static Err StartGet(UInt8 req, const char *path, const char *table, const char *player)
+{
+    uint8_t result;
+    UInt8 tries = 0;
+
+    CancelGet();
+    if (!hs_build_url(gUrl, sizeof(gUrl), gPrefs.server, path, table, player))
+        return heErrNio | FN_ERR_URL_TOO_LONG;
+    result = fn_init();
+    while (result == FN_OK) {
+        result = fn_open(&gHandle, FN_METHOD_GET, gUrl + URL_SKIP, FN_OPEN_ALLOW_EVICT);
+        if (!LostReply(result) || ++tries >= NET_TRIES)
             break;
     }
-    if (err != errNone || *ndevErr != 0)
-        return err;
-    if (len == 0)
-        return heErrNoTable;
-    if (!hs_parse_game(gReply, len, &gGame))
-        return heErrBadReply;
-    gHaveGame = true;
+    if (result != FN_OK) {
+        gHandle = FN_INVALID_HANDLE;
+        return NioErr(result);
+    }
+    gReq = req;
+    gGotInfo = false;
+    gReplyLen = 0;
+    gTries = 0;
+    gLastHeard = gNextStep = TimGetTicks();
     return errNone;
 }
 
-static Err FetchTables(UInt8 *ndevErr)
+/* One exchange of the GET in flight: first its HTTP status (INFO), then
+ * the body (READ) until EOF. Both are non-blocking, answering NOT_READY
+ * until the server has; a lost reply is asked for again at the same
+ * offset, which NIO answers with the same bytes. Returns true once the
+ * reply is whole or the GET failed (*err), having closed the handle. */
+static Boolean StepGet(Err *err)
 {
-    UInt16 len, attempt;
-    Err err = errNone;
+    uint16_t httpStatus, got, want;
+    uint32_t length;
+    uint8_t flags, result;
+    Boolean done = false;
 
-    *ndevErr = 0;
-    if (!hs_build_url(gUrl, sizeof(gUrl), gPrefs.server, "tables", NULL, NULL))
-        return fnErrTooBig;
-    for (attempt = 0; attempt < 2; attempt++) {
-        err = HttpGet(&len, ndevErr);
-        if (err != fnErrNoReply)
-            break;
+    *err = errNone;
+    EvtResetAutoOffTimer();
+    if (!gGotInfo) {
+        result = fn_info(gHandle, &httpStatus, &length, &flags);
+        if (result == FN_OK) {
+            gGotInfo = true;
+            gLastHeard = TimGetTicks();
+            if ((flags & FN_INFO_HAS_STATUS) && (httpStatus < 200 || httpStatus > 299)) {
+                *err = heErrHttp | (httpStatus & 0x0FFF);
+                done = true;
+            }
+        }
+    } else {
+        want = sizeof(gReply) - gReplyLen;
+        if (want > NET_CHUNK)
+            want = NET_CHUNK;
+        if (want == 0) {
+            *err = heErrTooLong;
+            done = true;
+            result = FN_OK;
+        } else {
+            result = fn_read(gHandle, gReplyLen, gReply + gReplyLen, want, &got, &flags);
+            if (result == FN_OK) {
+                if (got > want) {
+                    *err = heErrBadReply;
+                    done = true;
+                } else {
+                    gReplyLen += got;
+                    if (got > 0)
+                        gLastHeard = TimGetTicks();
+                    done = (flags & FN_READ_EOF) != 0;
+                }
+            }
+        }
     }
-    if (err != errNone || *ndevErr != 0)
+
+    if (LostReply(result)) {
+        if (++gTries >= NET_TRIES) {
+            *err = NioErr(result);
+            done = true;
+        }
+    } else if (result == FN_ERR_NOT_READY || result == FN_ERR_BUSY) {
+        gTries = 0;
+        gNextStep = TimGetTicks() + READ_POLL_TICKS;
+    } else if (result != FN_OK) {
+        *err = NioErr(result);
+        done = true;
+    } else {
+        gTries = 0;
+    }
+    if (!done && TimGetTicks() - gLastHeard >
+                     (gGotInfo || gReplyLen > 0 ? STALL_TICKS : FIRST_STATUS_TICKS)) {
+        *err = heErrTimeout;
+        done = true;
+    }
+    if (done) {
+        fn_close(gHandle);
+        gHandle = FN_INVALID_HANDLE;
+        gReq = REQ_NONE;
+    }
+    return done;
+}
+
+/* Runs the GET in flight to its end, for when there is no event loop left
+ * to run it (the app is closing). */
+static Err FinishGet(void)
+{
+    Err err;
+
+    while (!StepGet(&err))
+        SysTaskDelay(READ_POLL_TICKS);
+    return err;
+}
+
+/* Starts a game call (state, move/XX, leave) of this player at the table. */
+static Err StartGameCall(UInt8 req, const char *path)
+{
+    return StartGet(req, path, gPrefs.table, gPrefs.name);
+}
+
+/* The reply of a game call, into gGame. */
+static Err GameReply(Err err)
+{
+    if (err != errNone)
         return err;
-    if (!hs_parse_tables(gReply, len, &gTables))
+    if (gReplyLen == 0)
+        return heErrNoTable;
+    if (!hs_parse_game(gReply, gReplyLen, &gGame))
         return heErrBadReply;
+    gHaveGame = true;
     return errNone;
 }
 
@@ -621,7 +715,7 @@ static void DrawTable(void)
 
     if (!gHaveGame) {
         FntSetFont(boldFont);
-        WinDrawChars("FN Texas Hold'em", 16, 34, 40);
+        WinDrawChars("FI Texas Hold'em", 16, 34, 40);
         FntSetFont(stdFont);
         DrawFit(gNotice[0] ? gNotice : "Taking a seat...", 4, 60, 152, false);
         DrawFelt();
@@ -689,20 +783,20 @@ static void AfterState(void)
     }
 }
 
-static void LeaveTable(void);
-
-static void PollFailed(Err err, UInt8 ndevErr)
+static void PollFailed(Err err)
 {
     char detail[96];
 
     gFailures++;
     if (gFailures >= MAX_FAILURES) {
-        LeaveTable();
-        ShowError("Lost the table.", err, ndevErr);
+        /* Not worth a leave the server would not hear either. */
+        gSeated = false;
+        gMyTurn = false;
+        ShowError("Lost the table.", err);
         FrmGotoForm(SetupForm);
         return;
     }
-    ErrorText(err, ndevErr, detail);
+    ErrorText(err, detail);
     StrPrintF(gNotice, "Retrying (%u)... ", gFailures);
     StrNCat(gNotice, detail, sizeof(gNotice) - 1);
     gNextPoll = TimGetTicks() + POLL_GAP_TICKS * 2;
@@ -711,19 +805,24 @@ static void PollFailed(Err err, UInt8 ndevErr)
 
 static void Poll(void)
 {
-    UInt8 ndevErr;
-    Err err;
+    Err err = StartGameCall(REQ_STATE, "state");
 
-    err = GameCall("state", &ndevErr);
+    if (err != errNone)
+        PollFailed(err);
+}
+
+static void PollDone(Err err)
+{
+    err = GameReply(err);
     if (err == heErrNoTable && !gHaveGame) {
         /* A table that does not exist is not worth retrying. */
         gSeated = false;
-        ShowError("Could not sit down.", err, 0);
+        ShowError("Could not sit down.", err);
         FrmGotoForm(SetupForm);
         return;
     }
-    if (err != errNone || ndevErr != 0) {
-        PollFailed(err, ndevErr);
+    if (err != errNone) {
+        PollFailed(err);
         return;
     }
     gFailures = 0;
@@ -732,23 +831,31 @@ static void Poll(void)
     DrawTable();
 }
 
+static void MoveFailed(void)
+{
+    StrCopy(gNotice, "Move not sent. Tap it again.");
+    DrawTable();
+}
+
 static void PlayMove(Int16 i)
 {
     char path[12];
-    UInt8 ndevErr;
-    Err err;
 
-    if (!gMyTurn || i < 0 || i >= gGame.moveCount)
+    if (!gMyTurn || gReq != REQ_NONE || i < 0 || i >= gGame.moveCount)
         return;
     StrCopy(path, "move/");
     StrCat(path, gGame.moves[i].code);
     StrCopy(gNotice, "Sending your move...");
     RedrawStatus();
+    if (StartGameCall(REQ_MOVE, path) != errNone)
+        MoveFailed();
+}
+
+static void MoveDone(Err err)
+{
     gNotice[0] = '\0';
-    err = GameCall(path, &ndevErr);
-    if (err != errNone || ndevErr != 0) {
-        StrCopy(gNotice, "Move not sent. Tap it again.");
-        DrawTable();
+    if (GameReply(err) != errNone) {
+        MoveFailed();
         return;
     }
     gMyTurn = false;
@@ -756,17 +863,36 @@ static void PlayMove(Int16 i)
     DrawTable();
 }
 
-/* Gives the seat back to the server, best effort. */
+/* The Leave button: gives the seat back, then goes to the setup form
+ * whether or not the server heard. */
+static void BeginLeave(void)
+{
+    if (!gSeated || gReq == REQ_LEAVE)
+        return;
+    gMyTurn = false;
+    StrCopy(gNotice, "Leaving the table...");
+    DrawTable();
+    if (gFailures >= MAX_FAILURES || StartGameCall(REQ_LEAVE, "leave") != errNone) {
+        gSeated = false;
+        FrmGotoForm(SetupForm);
+    }
+}
+
+static void LeaveDone(void)
+{
+    gSeated = false;
+    FrmGotoForm(SetupForm);
+}
+
+/* Gives the seat back to the server as the app closes, best effort. */
 static void LeaveTable(void)
 {
-    UInt8 ndevErr;
-
     if (!gSeated)
         return;
     gSeated = false;
     gMyTurn = false;
-    if (gFailures < MAX_FAILURES)
-        GameCall("leave", &ndevErr);
+    if (gFailures < MAX_FAILURES && StartGameCall(REQ_LEAVE, "leave") == errNone)
+        FinishGet();
 }
 
 static Boolean InRect(const RectangleType *r, Coord x, Coord y)
@@ -839,10 +965,8 @@ static Boolean TablePen(Coord x, Coord y)
     } else {
         LeaveRect(&r);
         if (InRect(&r, x, y)) {
-            if (TrackPen(&r)) {
-                LeaveTable();
-                FrmGotoForm(SetupForm);
-            }
+            if (TrackPen(&r))
+                BeginLeave();
             return true;
         }
     }
@@ -912,6 +1036,12 @@ static Boolean TableHandleEvent(EventType *event)
         DrawTable();
         return true;
     case frmCloseEvent:
+        /* Closing mid-leave (another app was launched) lets it finish. */
+        if (gReq == REQ_LEAVE) {
+            FinishGet();
+            gSeated = false;
+        }
+        CancelGet();
         LeaveTable();
         return false;
     case nilEvent:
@@ -923,8 +1053,7 @@ static Boolean TableHandleEvent(EventType *event)
     case menuEvent:
         switch (event->data.menu.itemID) {
         case TableMenuLeave:
-            LeaveTable();
-            FrmGotoForm(SetupForm);
+            BeginLeave();
             return true;
         case TableMenuResult:
             ShowResult();
@@ -959,7 +1088,7 @@ static void TableIdle(void)
             return;
         gMyTurn = false;
     }
-    if ((Int32)(TimGetTicks() - gNextPoll) >= 0)
+    if (gReq == REQ_NONE && (Int32)(TimGetTicks() - gNextPoll) >= 0)
         Poll();
 }
 
@@ -1069,25 +1198,38 @@ static void ShowTables(FormType *form)
     LstDrawList(list);
 }
 
+static void TablesDone(Err err)
+{
+    FormType *form = FrmGetFormPtr(SetupForm);
+    char text[48];
+
+    if (err == errNone && !hs_parse_tables(gReply, gReplyLen, &gTables))
+        err = heErrBadReply;
+    if (err != errNone)
+        gTables.count = 0;
+    if (form)
+        ShowTables(form);
+    if (err != errNone) {
+        SetStatus("No table list. Tap Refresh.");
+        ShowError("Could not list the tables.", err);
+        return;
+    }
+    StrPrintF(text, "%u tables. Pick one, Sit Down.", gTables.count);
+    SetStatus(text);
+}
+
+/* Asks for the table list; TablesDone shows it when it comes. */
 static void RefreshTables(FormType *form)
 {
-    char text[48];
-    UInt8 ndevErr;
     Err err;
 
     ReadSetup(form);
     gTables.count = 0;
     ShowTables(form);
     SetStatus("Asking the server...");
-    err = FetchTables(&ndevErr);
-    ShowTables(form);
-    if (err != errNone || ndevErr != 0) {
-        SetStatus("No table list. Tap Tables.");
-        ShowError("Could not list the tables.", err, ndevErr);
-        return;
-    }
-    StrPrintF(text, "%u tables. Pick one, Sit Down.", gTables.count);
-    SetStatus(text);
+    err = StartGet(REQ_TABLES, "tables", NULL, NULL);
+    if (err != errNone)
+        TablesDone(err);
 }
 
 static void SitDown(FormType *form)
@@ -1133,6 +1275,8 @@ static Boolean SetupHandleEvent(EventType *event)
         FrmDrawForm(form);
         return true;
     case frmCloseEvent:
+        if (gReq == REQ_TABLES)
+            CancelGet();
         ReadSetup(form);
         return false;
     case fetchEvent:
@@ -1206,15 +1350,42 @@ static Boolean IsTableHardKey(const EventType *event)
            FrmGetActiveFormID() == TableForm;
 }
 
+/* Moves the GET in flight on by one exchange when it is due, and hands a
+ * finished reply to its form. */
+static void NetIdle(void)
+{
+    UInt8 req = gReq;
+    Err err;
+
+    if (req == REQ_NONE || (Int32)(TimGetTicks() - gNextStep) < 0 || !StepGet(&err))
+        return;
+    switch (req) {
+    case REQ_TABLES:
+        TablesDone(err);
+        break;
+    case REQ_STATE:
+        PollDone(err);
+        break;
+    case REQ_MOVE:
+        MoveDone(err);
+        break;
+    case REQ_LEAVE:
+        LeaveDone();
+        break;
+    }
+}
+
 static void EventLoop(void)
 {
     EventType event;
     Err err;
 
     do {
-        EvtGetEvent(&event, gSeated ? TICK_TICKS : evtWaitForever);
+        EvtGetEvent(&event, gReq != REQ_NONE ? READ_POLL_TICKS :
+                            gSeated ? TICK_TICKS : evtWaitForever);
         if (IsTableHardKey(&event)) {
             TableKey(event.data.keyDown.chr);
+            NetIdle();
             TableIdle();
             continue;
         }
@@ -1224,8 +1395,10 @@ static void EventLoop(void)
             continue;
         if (!AppHandleEvent(&event))
             FrmDispatchEvent(&event);
-        if (event.eType != appStopEvent)
+        if (event.eType != appStopEvent) {
+            NetIdle();
             TableIdle();
+        }
     } while (event.eType != appStopEvent);
 }
 
@@ -1260,14 +1433,15 @@ static Err AppStart(void)
     LoadPrefs();
     gStatus[0] = '\0';
     gOffscreen = WinCreateOffscreenWindow(160, 160, screenFormat, &err);
-    return FnOpen();
+    return errNone;
 }
 
 static void AppStop(void)
 {
     FrmCloseAllForms(); /* the table form's close gives up the seat */
     LeaveTable();
-    FnClose();
+    CancelGet();
+    fn_shutdown();
     if (gOffscreen)
         WinDeleteWindow(gOffscreen, false);
     gOffscreen = NULL;
@@ -1285,7 +1459,7 @@ UInt32 PilotMain(UInt16 cmd, MemPtr cmdPBP, UInt16 launchFlags)
     }
     err = AppStart();
     if (err != errNone) {
-        ShowError("Could not open the cradle port.", err, 0);
+        ShowError("Could not open the cradle port.", err);
         AppStop();
         return 0;
     }

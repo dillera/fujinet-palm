@@ -1,6 +1,6 @@
 #include "HoldemRsc.h"
 
-VERSION ID 1 "0.1"
+VERSION ID 1 "0.2"
 
 ICONFAMILYEX
 BEGIN
@@ -12,7 +12,7 @@ NOFRAME
 USABLE
 MENUID SetupMenu
 BEGIN
-    TITLE "FN Texas Hold'em"
+    TITLE "FI Texas Hold'em"
     LABEL "Name:" AUTOID AT (2 17)
     FIELD ID SetupNameField AT (38 17 50 12) UNDERLINED SINGLELINE MAXCHARS 8
     LABEL "Server:" AUTOID AT (2 31)
@@ -59,7 +59,7 @@ END
 ALERT ID RomIncompatibleAlert
 ERROR
 BEGIN
-    TITLE "FN Texas Hold'em"
+    TITLE "FI Texas Hold'em"
     MESSAGE "This app needs Palm OS 3.1 or later."
     BUTTONS "OK"
 END
@@ -67,7 +67,7 @@ END
 ALERT ID MessageAlert
 ERROR
 BEGIN
-    TITLE "FN Texas Hold'em"
+    TITLE "FI Texas Hold'em"
     MESSAGE "^1^2^3"
     BUTTONS "OK"
 END
@@ -83,7 +83,7 @@ END
 ALERT ID AboutAlert
 INFORMATION
 BEGIN
-    TITLE "FN Texas Hold'em"
-    MESSAGE "Multiplayer Texas Hold'em against the FujiNet game server, through FujiNet's N1: device.\n\nTap a move, or pick one with the scroll keys and press any app button.\n\nCard art from the Apple II and Lynx clients of fujinet-texasHoldEm (GPL-3.0)."
+    TITLE "FI Texas Hold'em"
+    MESSAGE "Multiplayer Texas Hold'em against the FujiNet game server, through a FujiNet NIO on the cradle.\n\nTap a move, or pick one with the scroll keys and press any app button.\n\nCard art from the Apple II and Lynx clients of fujinet-texasHoldEm (GPL-3.0)."
     BUTTONS "OK"
 END
