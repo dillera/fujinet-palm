@@ -20,9 +20,17 @@ image:
 test:
 	$(MAKE) -C tests
 
+# Palm OS calls newer than 3.1 in each built app (see tools/palm_traps.py).
+traps: all
+	@mkdir -p build
+	@$(DOCKER) sh -c 'cat /opt/palmdev/sdk-3.5/include/Core/CoreTraps.h > build/CoreTraps.h; \
+		for app in $(APPS); do m68k-palmos-objdump -d apps/$$app/$$app > build/$$app.dis; done'
+	@python3 tools/palm_traps.py build/CoreTraps.h $(APPS:%=build/%.dis)
+
 clean:
 	$(DOCKER) sh -c 'for app in $(APPS); do make -C apps/$$app clean; done'
 	rm -f $(APPS:%=apps/%/icon.bmp)
 	$(MAKE) -C tests clean
+	rm -rf build
 
-.PHONY: all image test clean
+.PHONY: all image test traps clean

@@ -19,3 +19,4 @@ tests/fujipet_test
 apps/FujiPet/FujiPet
 fujipet-pets.json
 __pycache__/
+build/

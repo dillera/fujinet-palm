@@ -1735,11 +1735,13 @@ static void EventLoop(void)
     } while (event.eType != appStopEvent);
 }
 
-/* The Serial Manager with SrmOpen first shipped in Palm OS 3.3. */
-static Boolean HasNewSerialManager(void)
+/* Palm OS 3.1, the oldest release the app is tested on. */
+static Boolean RomCompatible(void)
 {
-    UInt32 value;
-    return FtrGet(sysFileCSerialMgr, sysFtrNewSerialPresent, &value) == errNone && value != 0;
+    UInt32 rom = 0;
+
+    FtrGet(sysFtrCreator, sysFtrNumROMVersion, &rom);
+    return rom >= sysMakeROMVersion(3, 1, 0, sysROMStageRelease, 0);
 }
 
 /* Colour on OS 3.5 and later, if the screen takes 8 bits (or 4 or 2
@@ -1823,7 +1825,7 @@ UInt32 PilotMain(UInt16 cmd, MemPtr cmdPBP, UInt16 launchFlags)
 {
     if (cmd != sysAppLaunchCmdNormalLaunch)
         return 0;
-    if (!HasNewSerialManager()) {
+    if (!RomCompatible()) {
         FrmAlert(RomIncompatibleAlert);
         return 0;
     }

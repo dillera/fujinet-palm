@@ -25,7 +25,11 @@ serves the Palm two ways on the same port:
 | FN Texas Hold'em | `ADTH` | multiplayer Texas Hold'em against the [FujiNet Hold'em server](https://github.com/dillera/servers/tree/main/fujinet-game-system/texasholdem), with the other platforms' clients, through FujiNet's N1: |
 | FN FujiPet      | `ADFP`  | a virtual pet that grows up like the 1996 original, and meets other pets on a FujiPet friend server through FujiNet's N1: |
 
-All need Palm OS 3.3 or later (the Serial Manager with `SrmOpen`).
+All run on Palm OS 3.1 or later. They open the cradle port with the Serial
+Manager's `SrmOpen` on Palm OS 3.3 and later, and with the older serial
+library's `SerOpen` before that. `make traps` lists any Palm OS call an app
+makes that is newer than 3.1, so a new one is noticed before it crashes an
+older Palm.
 
 Queuing copies the chosen file into `/palm/install` on the host slot named
 `SD`; the next HotSync installs it.
@@ -64,6 +68,7 @@ and HotSync.
 | `apps/*/`                | one app per folder; `apps/app.mk` has the build rules  |
 | `tests/`                 | FujiBus interop test against `FujiBusPacket.cpp`; lobby JSON and Hold'em reader tests; FujiPet's pet, protocol and server tests |
 | `tools/make_icon.py`     | draws the launcher icon, the FujiNet logo              |
+| `tools/palm_traps.py`    | lists the Palm OS calls an app makes that are newer than 3.1 (`make traps`) |
 | `tools/make_cards.py`    | converts the Hold'em card art into `apps/Holdem/cardart.h` |
 | `tools/make_pet_art.py`  | FN FujiPet's sprites and icon: writes `apps/FujiPet/petart.h` |
 | `tools/fujipet-server/`  | the FujiPet friend server (Python 3, no dependencies)  |
@@ -135,7 +140,7 @@ adds yours. Pick a friend that is online and a message, and **Send**: it pops up
 on their Palm at once, and a kind one cheers their pet up. The ground line on
 the main screen says how many friends are online.
 
-One `.prc` serves every Palm from OS 3.3: on a colour Palm (OS 3.5 and later)
+One `.prc` serves every Palm from OS 3.1: on a colour Palm (OS 3.5 and later)
 it switches to 256 colours and draws each type in its own; on a
 black-and-white one the same sprites are outlines with a grey dither. The art
 is ASCII in `tools/make_pet_art.py`, which writes `apps/FujiPet/petart.h`:

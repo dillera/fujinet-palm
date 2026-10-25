@@ -1,4 +1,5 @@
 #include <PalmOS.h>
+#include <SerialMgrOld.h>
 
 #include "fnlink.h"
 
@@ -24,19 +25,73 @@
 
 static UInt16 gPort;
 static Boolean gOpen = false;
+static Boolean gOldSerial; /* before Palm OS 3.3: the serial library's SerOpen */
 static UInt8 gRxBuffer[FN_RX_BUFFER];
 static UInt8 gFrame[FB_MAX_FRAME];
 
+/* The port calls below pick the Serial Manager that SrmOpen opened (Palm OS
+ * 3.3 and later) or the older serial library; both default to 8N1 with RTS
+ * flow control. */
+static UInt32 PortReceive(UInt8 *buf, UInt32 count, Int32 timeout, Err *err)
+{
+    if (gOldSerial)
+        return SerReceive(gPort, buf, count, timeout, err);
+    return SrmReceive(gPort, buf, count, timeout, err);
+}
+
+static void PortSend(const UInt8 *buf, UInt32 count)
+{
+    Err err;
+
+    if (gOldSerial) {
+        SerSend(gPort, (void *)buf, count, &err);
+        SerSendWait(gPort, -1);
+    } else {
+        SrmSend(gPort, (void *)buf, count, &err);
+        SrmSendWait(gPort);
+    }
+}
+
+static void PortFlush(void)
+{
+    if (gOldSerial)
+        SerReceiveFlush(gPort, 0);
+    else
+        SrmReceiveFlush(gPort, 0);
+}
+
+static void PortClearErr(void)
+{
+    if (gOldSerial)
+        SerClearErr(gPort);
+    else
+        SrmClearErr(gPort);
+}
+
 Err FnOpen(void)
 {
+    UInt32 value;
     Err err;
 
     if (gOpen)
         return errNone;
-    err = SrmOpen(serPortCradlePort, FN_BAUD, &gPort);
-    if (err != errNone)
-        return err;
-    SrmSetReceiveBuffer(gPort, gRxBuffer, sizeof(gRxBuffer));
+    gOldSerial = FtrGet(sysFileCSerialMgr, sysFtrNewSerialPresent, &value) != errNone ||
+                 value == 0;
+    if (!gOldSerial) {
+        err = SrmOpen(serPortCradlePort, FN_BAUD, &gPort);
+        if (err != errNone)
+            return err;
+        SrmSetReceiveBuffer(gPort, gRxBuffer, sizeof(gRxBuffer));
+    } else {
+        err = SysLibFind("Serial Library", &gPort);
+        if (err == errNone)
+            err = SerOpen(gPort, 0, FN_BAUD);
+        if (err == serErrAlreadyOpen)
+            SerClose(gPort); /* another app holds it: give our open back */
+        if (err != errNone)
+            return err;
+        SerSetReceiveBuffer(gPort, gRxBuffer, sizeof(gRxBuffer));
+    }
     gOpen = true;
     return errNone;
 }
@@ -45,8 +100,13 @@ void FnClose(void)
 {
     if (!gOpen)
         return;
-    SrmSetReceiveBuffer(gPort, NULL, 0);
-    SrmClose(gPort);
+    if (gOldSerial) {
+        SerSetReceiveBuffer(gPort, NULL, 0);
+        SerClose(gPort);
+    } else {
+        SrmSetReceiveBuffer(gPort, NULL, 0);
+        SrmClose(gPort);
+    }
     gOpen = false;
 }
 
@@ -58,9 +118,9 @@ static UInt16 ReceiveFrame(UInt32 deadline)
     Err err;
 
     while (TimGetTicks() < deadline) {
-        if (SrmReceive(gPort, &byte, 1, SysTicksPerSecond() / 20, &err) != 1) {
+        if (PortReceive(&byte, 1, SysTicksPerSecond() / 20, &err) != 1) {
             if (err != errNone && err != serErrTimeOut)
-                SrmClearErr(gPort);
+                PortClearErr();
             continue;
         }
         if (len == 0 && byte != 0xC0)
@@ -96,9 +156,8 @@ Err FnCallDevice(UInt8 device, UInt8 command, const FbParam *params, UInt16 npar
         return fnErrTooBig;
 
     for (i = 0; i < attempts; i++) {
-        SrmReceiveFlush(gPort, 0);
-        SrmSend(gPort, request, requestLen, &err);
-        SrmSendWait(gPort);
+        PortFlush();
+        PortSend(request, requestLen);
         frameLen = ReceiveFrame(TimGetTicks() + waitTicks);
         if (frameLen == 0 || !fb_parse_reply(gFrame, frameLen, &parsed) ||
             parsed.device != device)

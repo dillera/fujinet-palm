@@ -45,7 +45,7 @@ ALERT ID RomIncompatibleAlert
 ERROR
 BEGIN
     TITLE "FN Lobby"
-    MESSAGE "This app needs Palm OS 3.3 or later."
+    MESSAGE "This app needs Palm OS 3.1 or later."
     BUTTONS "OK"
 END
 
