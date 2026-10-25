@@ -11,6 +11,13 @@ private. The newer ones come from PalmDB's
 PalmDB has no Palm VII ROM, so there is no Palm OS 3.2 image: the Palm VIIx
 (3.5) is the nearest.
 
+Two of PalmDB's ROMs are not quite what their names say. The one PalmDB calls
+`Palm-III-3.5-en.bin` is Palm OS 3.0 (its version string is "v. 3.0"), so it
+is kept here as `Palm-III-3.0-en.bin`; it shows the apps' "needs Palm OS 3.1"
+alert. `Palm-IIIc-3.50-en-beta.rom` is a pre-release 3.5: FN and FI FujiPet
+turn on colour only for a released 3.5 or later, so on it they draw in black
+and white. Use `palm-iiic-os4.0.img` for colour.
+
 ## Images
 
 Each image has finished Setup (pen calibrated, country and time set) and sits
@@ -19,17 +26,17 @@ CloudpilotEmu writes to the image it runs.
 
 | Image                     | Palm OS | Device as CloudpilotEmu runs it | Screen       |
 |---------------------------|---------|---------------------------------|--------------|
+| `palm-iii-os3.0.img`      | 3.0     | Palm III                        | 2-bit grey   |
 | `palm-iiix-os3.1.img`     | 3.1     | Palm V (IIIx ROM)               | 2-bit grey   |
 | `palm-v-os3.3.img`        | 3.3     | Palm V                          | 2-bit grey   |
-| `palm-iii-os3.5.img`      | 3.5     | Palm III                        | 2-bit grey   |
 | `palm-v-os3.5.img`        | 3.5     | Palm V (generic EZ ROM)         | 2-bit grey   |
 | `palm-viix-os3.5.img`     | 3.5     | Palm VIIx                       | 2-bit grey   |
 | `palm-m100-os3.5.1.img`   | 3.5.1   | m105 (m100 ROM)                 | 2-bit grey   |
-| `palm-iiic-os3.5.img`     | 3.5     | Palm IIIc (beta ROM)            | 256 colours  |
+| `palm-iiic-os3.5.img`     | 3.5 beta | Palm IIIc (beta ROM)           | 256 colours  |
 | `palm-iiic-os4.0.img`     | 4.0     | Palm IIIc                       | 256 colours  |
 
 ```sh
-mkdir -p runs/t35 && cp assets/images/palm-iii-os3.5.img runs/t35/palm.img
+mkdir -p runs/t35 && cp assets/images/palm-m100-os3.5.1.img runs/t35/palm.img
 tools/rig.sh start runs/t35 runs/t35/palm.img nio      # or classic, or none
 tools/rig.sh cmd runs/t35 install $PWD/apps/FujiNetTest/FujiNetTest.prc
 tools/rig.sh cmd runs/t35 launch 'FI\ Test'
@@ -50,7 +57,7 @@ long text in short bursts.
 | `Palm-V-3.1-en.rom`          | 3.1     | PalmDB  | `3cba86ab018478e0`  |
 | `Palm-III-3.3-en.rom`        | 3.3     | PalmDB  | `eaaf33e624c42b52`  |
 | `Palm-V-3.3-en.rom`          | 3.3     | earlier | `d398aee04a707bd2`  |
-| `Palm-III-3.5-en.bin`        | 3.5     | PalmDB  | `5e134bdd52e78921`  |
+| `Palm-III-3.0-en.bin`        | 3.0     | PalmDB  | `5e134bdd52e78921`  |
 | `Palm-OS-3.5-en-ez.rom`      | 3.5     | PalmDB  | `6f5ea152a22e43e4`  |
 | `Palm-VIIx-3.5.bin`          | 3.5     | PalmDB  | `711e8d3e93e80207`  |
 | `Palm-IIIc-3.50-en-beta.rom` | 3.5     | PalmDB  | `a7bf15e8facc5432`  |
