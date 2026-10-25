@@ -1,31 +1,34 @@
 # fujinet-palm
 
 Palm OS apps that talk to a [FujiNet](https://fujinet.online), and the tools
-to build them. This branch holds the **FN** apps, for the classic
-fujinet-firmware; the **FI** apps, rebuilt for FujiNet NIO, are on the `nio`
-branch.
+to build them.
+
+This branch holds the **FI** apps, rebuilt for
+[FujiNet NIO](https://github.com/markjfisher/fujinet-nio) on `fujinet-nio-lib`
+(its `palm` target). The classic **FN** apps, for fujinet-firmware, are on the
+`classic` branch.
 
 A Palm sits in its serial HotSync cradle, wired through a null modem to a
-FujiNet running the HotSync service from the `palm-demo-fozz` branch of
-[fujinet-firmware](https://github.com/dillera/fujinet-firmware/tree/palm-demo-fozz)
-(for example the `fujinet-rs232-s3-palm` build for the FN-RS232). FujiNet then
-serves the Palm two ways on the same port:
+FujiNet NIO with its HotSync service on (`hotsync.enabled` and `hotsync.cradle`
+in `fujinet.yaml`; see NIO's `docs/hotsync.md`). NIO then serves the Palm two
+ways on the same port:
 
-- **HotSync**: pressing the cradle button syncs with FujiNet, which installs
-  the files queued in `/palm/install` on its SD card and backs the Palm up.
-- **FujiBus**: apps on the Palm send FujiNet commands at 115200 baud, as the
-  CONFIG app does on RS232 machines.
+- **HotSync**: pressing the cradle button syncs with NIO, which installs the
+  files queued in `hotsync/install/` on its persistent filesystem and backs the
+  Palm up.
+- **FujiBus**: apps on the Palm talk to NIO's devices at 115200 baud through
+  `fujinet-nio-lib`.
 
 ## Apps
 
-| App             | Creator | What it does                                                  |
-|-----------------|---------|---------------------------------------------------------------|
-| FN HotSync      | `ADHS`  | edit and browse host slots, queue apps for HotSync, HotSync now |
-| FI Test         | `ANTS`  | checks the link to a FujiNet NIO: firmware, board and network, and fetches a web page |
-| FI Bounce       | `ANBW`  | client for a [bounce-world](https://github.com/markjfisher/bounce-world) server (default `bouncy.diller.org:9003`) through a FujiNet NIO; its Info box counts cradle exchanges, so it doubles as a link stress test |
-| FN Lobby        | `ADLB`  | lists the game servers in the [FujiNet Game Lobby](https://github.com/FujiNetWIFI/fujinet-lobby) (`/viewFull`), with players, platforms and client URLs |
-| FN Texas Hold'em | `ADTH` | multiplayer Texas Hold'em against the [FujiNet Hold'em server](https://github.com/dillera/servers/tree/main/fujinet-game-system/texasholdem), with the other platforms' clients, through FujiNet's N1: |
-| FN FujiPet      | `ADFP`  | a virtual pet that grows up like the 1996 original, and meets other pets on a FujiPet friend server through FujiNet's N1: |
+| App              | Creator | What it does                                                  |
+|------------------|---------|---------------------------------------------------------------|
+| FI Config        | `ANHS`  | keeps a list of TNFS servers, browses them, queues `.prc`/`.pdb`/`.pqa` files into NIO's HotSync install folder, and starts a HotSync |
+| FI Test          | `ANTS`  | checks the link to NIO: firmware, board and network, and fetches a web page |
+| FI Bounce        | `ANBW`  | client for a [bounce-world](https://github.com/markjfisher/bounce-world) server (default `bouncy.diller.org:9003`); its Info box counts cradle exchanges, so it doubles as a link stress test |
+| FI Lobby         | `ANLB`  | lists the game servers in the [FujiNet Game Lobby](https://github.com/FujiNetWIFI/fujinet-lobby) (`/viewFull`), with players, platforms and client URLs, and a QA lobby switch in the menu |
+| FI Texas Hold'em | `ANTH`  | multiplayer Texas Hold'em against the [FujiNet Hold'em server](https://github.com/dillera/servers/tree/main/fujinet-game-system/texasholdem), with the other platforms' clients |
+| FI FujiPet       | `ANFP`  | a virtual pet that grows up like the 1996 original, and meets other pets on a FujiPet friend server |
 
 All run on Palm OS 3.1 or later. They open the cradle port with the Serial
 Manager's `SrmOpen` on Palm OS 3.3 and later, and with the older serial
@@ -33,13 +36,12 @@ library's `SerOpen` before that. `make traps` lists any Palm OS call an app
 makes that is newer than 3.1, so a new one is noticed before it crashes an
 older Palm.
 
-Apps named FI talk to [FujiNet NIO](https://github.com/markjfisher/fujinet-nio)
-through `fujinet-nio-lib` (its `palm` target); apps named FN speak the classic
-firmware's FujiBus commands. An FI app has its own creator code (`AN..`), so it
-can sit beside its FN counterpart on the same Palm.
-
-Queuing copies the chosen file into `/palm/install` on the host slot named
-`SD`; the next HotSync installs it.
+Each FI app has its own creator code (`AN..` where its FN twin has `AD..`), so
+both families can sit on the same Palm. Every request goes through
+`fujinet-nio-lib`, which reclaims the line from NIO's HotSync listener after an
+idle spell. NIO's NetworkDevice replays a READ or WRITE asked for again at the
+same offset, so an app retries a reply lost on the cradle without losing or
+repeating stream bytes.
 
 ## Building
 
@@ -56,38 +58,51 @@ make test     # desktop tests: the FujiBus codec against the firmware's own,
               # FujiPet's life cycle and protocol, and its friend server
 ```
 
-`make` also builds `fujinet-nio-lib` for the FI apps. It looks for the library in
+`make` also builds `fujinet-nio-lib` for the apps. It looks for the library in
 `../fujinet-nio-workspace/repos/fujinet-nio-lib`; set `NIO_LIB` to use another
 checkout. `make test` and the harness below expect a `fujinet-firmware`
 checkout next to this repository.
 
-To install an app, copy its `.prc` to `/palm/install/` on FujiNet's SD card
-(the web UI's WebDAV share works: `curl -T app.prc http://<fujinet>/dav/palm/install/`)
-and HotSync.
+To install an app, put its `.prc` in NIO's `hotsync/install/` and HotSync:
+queue it from a TNFS server with FI Config, or from NIO's console with
+`hotsync.fetch http://<host>/<app>.prc` (see NIO's `docs/hotsync.md`).
 
 ## Layout
 
 | Path                     | Contents                                               |
 |--------------------------|--------------------------------------------------------|
 | `common/fujibus.*`       | FujiBus (SLIP) request/reply framing, portable C89     |
-| `common/fnlink.*`        | FujiNet commands over the cradle port, with retries   |
-| `common/fnnet.*`         | N: network devices (open, status, read, write, close) |
+| `common/fnlink.*`, `common/fnnet.*` | the classic firmware's FujiBus commands and N: devices (FN apps; unused here) |
 | `common/lobbyjson.*`     | streaming reader for the lobby's JSON server list     |
 | `common/holdem.*`        | the Hold'em server's binary replies, and its URLs      |
 | `apps/*/`                | one app per folder; `apps/app.mk` has the build rules  |
+| `apps/FujiConfig/filedev.*` | NIO's FileDevice (list, read, write, make directory) over `fn_raw_call` |
 | `tests/`                 | FujiBus interop test against `FujiBusPacket.cpp`; lobby JSON and Hold'em reader tests; FujiPet's pet, protocol and server tests |
 | `tools/make_icon.py`     | draws the launcher icon, the FujiNet logo              |
 | `tools/palm_traps.py`    | lists the Palm OS calls an app makes that are newer than 3.1 (`make traps`) |
 | `tools/make_cards.py`    | converts the Hold'em card art into `apps/Holdem/cardart.h` |
-| `tools/make_pet_art.py`  | FN FujiPet's sprites and icon: writes `apps/FujiPet/petart.h` |
+| `tools/make_pet_art.py`  | FI FujiPet's sprites and icon: writes `apps/FujiPet/petart.h` |
 | `tools/fujipet-server/`  | the FujiPet friend server (Python 3, no dependencies)  |
-| `tools/hotsync-harness/` | runs the firmware's HotSync code on a Mac, against a real cradle or an emulator |
 | `docker/`                | the palmdev toolchain image                            |
 | `docs/guide/`            | the FujiNet Palm Guide (XeLaTeX, `make` there): every FN and FI app, with screenshots; `fujinet-palm-guide.pdf` |
 | `assets/`                | Palm OS ROMs, emulator images with Setup done (OS 3.1 to 4.0), and the CloudpilotEmu `--serial` patch; see `assets/README.md` |
 | `tools/rig.sh`           | runs an emulated Palm joined to FujiNet-PC or a POSIX FujiNet NIO, for testing |
 
-## FN Texas Hold'em
+## FI Config
+
+FN HotSync rebuilt for NIO. NIO has no host slots, so the app keeps its own
+list of TNFS servers (fujinet.diller.org and apps.irata.online to start).
+Browse a server, pick a Palm app or database, and FI Config copies it through
+NIO's FileDevice into `hotsync/install/` on NIO's persistent filesystem; the
+next HotSync installs it, from the app's HotSync button or the cradle's. Queue
+lists what is waiting, and Info shows NIO's firmware and network.
+
+FileDevice has no rename or delete, so a copy that fails part way stays in the
+queue. FI Config writes the file's first entry offset last, so HotSync refuses
+a cut-short file rather than installing a truncated app; queue the file again
+to replace it. The app assumes NIO's `hotsync.root` is `/hotsync`, the default.
+
+## FI Texas Hold'em
 
 A Palm client for the Texas Hold'em game of
 [fujinet-texasHoldEm](https://github.com/dillera/fujinet-texasHoldEm), at the
@@ -97,7 +112,8 @@ Game Lobby as "Texas Hold'em" (app key 8); a lobby address such as
 `https://th.carr-designs.com/?table=den` can be typed as the server, and its
 table is taken from it. The server runs every rule: as the Apple II client
 does, the app polls `/state?table=..&player=..&bin=1` (with `be=1` for
-big-endian numbers) about once a second through N1:, and plays the move codes
+big-endian numbers) about once a second, each request an HTTP GET opened with
+`fujinet-nio-lib` and read while the event loop keeps running, and plays the move codes
 the server offers with `/move/XX`. Leaving the table, or the app, sends
 `/leave`.
 
@@ -121,7 +137,7 @@ that repository:
 python3 tools/make_cards.py ../fujinet-texasHoldEm   # writes apps/Holdem/cardart.h
 ```
 
-## FN FujiPet
+## FI FujiPet
 
 A virtual pet after the original Tamagotchi. Name it and pick a type (Cat, Dog,
 Bunny or Dino) on the first screen, and its egg hatches five minutes later.
@@ -146,7 +162,10 @@ time that passed. **Options > Settings** can run its time Fast (a pet minute a
 second) or Turbo (a pet day a minute) to watch it grow up.
 
 With **Meet friends online** on, the app keeps a connection to a FujiPet friend
-server (`tools/fujipet-server/`, set as `host:port` in Settings) through N1:.
+server (`tools/fujipet-server/`, set as `host:port` in Settings) through NIO;
+if the server goes away, the pet reconnects by itself. With the POSIX NIO on a
+Mac, start the server with `--host ""` so it also listens on IPv6 (NIO tries
+only `::1` for `localhost`), or use `127.0.0.1:7878` in Settings.
 The Friends screen lists the pets registered there, online ones first; **Register**
 adds yours. Pick a friend that is online and a message, and **Send**: it pops up
 on their Palm at once, and a kind one cheers their pet up. The ground line on
@@ -163,21 +182,22 @@ python3 tools/make_pet_art.py --preview sheet.png   # also draws every sprite
 
 ## Writing an app
 
-Name the app `FN <name>` and give it its own creator code, `AD` plus two
+Name the app `FI <name>` and give it its own creator code, `AN` plus two
 capitals, set once as `CREATOR` in its Makefile; C code reads it as
-`APP_CREATOR` (from `fn_types.h`).
+`APP_CREATOR` (from `fn_types.h`). Set `NIO = 1` in the Makefile to link
+`fujinet-nio-lib` (see `apps/app.mk`), call `fn_init()` at start and
+`fn_shutdown()` at the end, and before starting a HotSync.
 
-Link `common/fujibus.c` and `common/fnlink.c`, and call the `Fn*` functions in
-`fnlink.h`. FujiNet listens for a HotSync on the same port whenever no FujiBus
-packet has arrived for 10 seconds, taking it for 1.5 s at a time, so a request
-can go unanswered; `fnlink.c` resends until FujiNet replies. Close the port
-(`FnClose`) before starting a HotSync.
+`fn_read` does not wait: it answers `FN_ERR_NOT_READY` until data arrives, so
+poll it from the event loop. When a reply is lost (`FN_ERR_TIMEOUT`,
+`FN_ERR_TRANSPORT` or `FN_ERR_IO`), ask again at the same offset; FI Bounce
+and FI Lobby show the pattern.
 
 ## License
 
 GPL-3.0, as fujinet-firmware, from which the FujiBus framing is ported.
 
-FN Texas Hold'em's card art (`apps/Holdem/cardart.h`) is converted from
+FI Texas Hold'em's card art (`apps/Holdem/cardart.h`) is converted from
 [fujinet-texasHoldEm](https://github.com/dillera/fujinet-texasHoldEm), also
 GPL-3.0: the Apple II client's hi-res character set and the Atari Lynx
 client's card sprites, by the authors of that repository and of Eric Carr's
