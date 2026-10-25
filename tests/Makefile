@@ -3,10 +3,12 @@ FW ?= ../../fujinet-firmware
 CFLAGS = -std=c89 -pedantic -Wall -Wextra -I../common
 CXXFLAGS = -std=c++20 -Wall -I../common -I$(FW)/include -I$(FW)/lib -I$(FW)/lib/bus
 
-all: fujibus_interop_test lobbyjson_test holdem_test
+all: fujibus_interop_test lobbyjson_test holdem_test fujipet_test
 	./fujibus_interop_test
 	./lobbyjson_test
 	./holdem_test
+	./fujipet_test
+	python3 fujipet_server_test.py
 
 fujibus.o: ../common/fujibus.c ../common/fujibus.h ../common/fn_types.h
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -21,5 +23,9 @@ HOLDEM = ../apps/Holdem
 holdem_test: holdem_test.c ../common/holdem.c ../common/holdem.h $(HOLDEM)/cards.c $(HOLDEM)/cards.h $(HOLDEM)/cardart.h ../common/fn_types.h
 	$(CC) $(CFLAGS) -I$(HOLDEM) -o $@ holdem_test.c ../common/holdem.c $(HOLDEM)/cards.c
 
+FUJIPET = ../apps/FujiPet
+fujipet_test: fujipet_test.c $(FUJIPET)/pet.c $(FUJIPET)/pet.h $(FUJIPET)/petproto.c $(FUJIPET)/petproto.h ../common/fn_types.h
+	$(CC) $(CFLAGS) -I$(FUJIPET) -o $@ fujipet_test.c $(FUJIPET)/pet.c $(FUJIPET)/petproto.c
+
 clean:
-	rm -f fujibus.o fujibus_interop_test lobbyjson_test holdem_test
+	rm -f fujibus.o fujibus_interop_test lobbyjson_test holdem_test fujipet_test

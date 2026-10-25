@@ -23,6 +23,7 @@ serves the Palm two ways on the same port:
 | FN Bounce World | `ADBW`  | client for a [bounce-world](https://github.com/markjfisher/bounce-world) server, through FujiNet's N1: |
 | FN Lobby        | `ADLB`  | lists the game servers in the [FujiNet Game Lobby](https://github.com/FujiNetWIFI/fujinet-lobby) (`/viewFull`), with players, platforms and client URLs |
 | FN Texas Hold'em | `ADTH` | multiplayer Texas Hold'em against the [FujiNet Hold'em server](https://github.com/dillera/servers/tree/main/fujinet-game-system/texasholdem), with the other platforms' clients, through FujiNet's N1: |
+| FN FujiPet      | `ADFP`  | a virtual pet that grows up like the 1996 original, and meets other pets on a FujiPet friend server through FujiNet's N1: |
 
 All need Palm OS 3.3 or later (the Serial Manager with `SrmOpen`).
 
@@ -40,7 +41,8 @@ make image    # once: builds the palmdev image from docker/Dockerfile
 make          # builds apps/*/*.prc
 make test     # desktop tests: the FujiBus codec against the firmware's own,
               # the lobby JSON reader against a saved /viewFull reply, and
-              # the Hold'em state reader against replies saved from its server
+              # the Hold'em state reader against replies saved from its server,
+              # FujiPet's life cycle and protocol, and its friend server
 ```
 
 `make test` and the harness below expect a `fujinet-firmware` checkout next to
@@ -60,9 +62,11 @@ and HotSync.
 | `common/lobbyjson.*`     | streaming reader for the lobby's JSON server list     |
 | `common/holdem.*`        | the Hold'em server's binary replies, and its URLs      |
 | `apps/*/`                | one app per folder; `apps/app.mk` has the build rules  |
-| `tests/`                 | FujiBus interop test against `FujiBusPacket.cpp`; lobby JSON and Hold'em reader tests |
+| `tests/`                 | FujiBus interop test against `FujiBusPacket.cpp`; lobby JSON and Hold'em reader tests; FujiPet's pet, protocol and server tests |
 | `tools/make_icon.py`     | draws the launcher icon, the FujiNet logo              |
 | `tools/make_cards.py`    | converts the Hold'em card art into `apps/Holdem/cardart.h` |
+| `tools/make_pet_art.py`  | FN FujiPet's sprites and icon: writes `apps/FujiPet/petart.h` |
+| `tools/fujipet-server/`  | the FujiPet friend server (Python 3, no dependencies)  |
 | `tools/hotsync-harness/` | runs the firmware's HotSync code on a Mac, against a real cradle or an emulator |
 | `docker/`                | the palmdev toolchain image                            |
 
@@ -98,6 +102,46 @@ that repository:
 
 ```sh
 python3 tools/make_cards.py ../fujinet-texasHoldEm   # writes apps/Holdem/cardart.h
+```
+
+## FN FujiPet
+
+A virtual pet after the original Tamagotchi. Name it and pick a type (Cat, Dog,
+Bunny or Dino) on the first screen, and its egg hatches five minutes later.
+The baby becomes a child within the hour, a teen a day later and an adult two
+days after that; how well it was looked after decides which of two teens and
+three adults it grows into (each type has its own: a well-raised cat becomes a
+Starcat, a neglected one a Grumpuss) and how long it lives. The best-kept
+live past ten days as seniors. When it dies it becomes an angel, and a tap
+starts a new egg.
+
+The eight icons are the original's: Feed (a meal fills a hunger heart, a snack
+a happy one), Light, Play (guess which way it will look, three of five to
+win), Medicine, Clean, Status (hearts, discipline, age, weight), Discipline
+and Friends. A heart running empty makes it call (the "!" in the corner); a
+call left for 15 minutes is a care mistake, as is leaving the light on once it
+sleeps. Children and teens also call for no reason now and then: scolding
+them then teaches discipline. Mess and too many sweets make it sick, and
+twelve hours sick or starving kill it.
+
+The pet lives on while the app is closed: the next launch catches up on the
+time that passed. **Options > Settings** can run its time Fast (a pet minute a
+second) or Turbo (a pet day a minute) to watch it grow up.
+
+With **Meet friends online** on, the app keeps a connection to a FujiPet friend
+server (`tools/fujipet-server/`, set as `host:port` in Settings) through N1:.
+The Friends screen lists the pets registered there, online ones first; **Register**
+adds yours. Pick a friend that is online and a message, and **Send**: it pops up
+on their Palm at once, and a kind one cheers their pet up. The ground line on
+the main screen says how many friends are online.
+
+One `.prc` serves every Palm from OS 3.3: on a colour Palm (OS 3.5 and later)
+it switches to 256 colours and draws each type in its own; on a
+black-and-white one the same sprites are outlines with a grey dither. The art
+is ASCII in `tools/make_pet_art.py`, which writes `apps/FujiPet/petart.h`:
+
+```sh
+python3 tools/make_pet_art.py --preview sheet.png   # also draws every sprite
 ```
 
 ## Writing an app

@@ -8,6 +8,7 @@ typedef UInt8 fn_u8;
 typedef UInt16 fn_u16;
 typedef UInt32 fn_u32;
 #define fn_memcpy(dst, src, n) MemMove((dst), (src), (n))
+#define fn_memset(dst, value, n) MemSet((dst), (n), (value))
 /* The app's creator ID, from CREATOR in its Makefile (see apps/app.mk). */
 #ifdef APP_CREATOR_STR
 #define APP_CREATOR (((UInt32)(UInt8)APP_CREATOR_STR[0] << 24) | ((UInt32)(UInt8)APP_CREATOR_STR[1] << 16) | \
@@ -20,6 +21,7 @@ typedef uint8_t fn_u8;
 typedef uint16_t fn_u16;
 typedef uint32_t fn_u32;
 #define fn_memcpy(dst, src, n) memmove((dst), (src), (n))
+#define fn_memset(dst, value, n) memset((dst), (value), (n))
 #endif
 
 #endif /* FN_TYPES_H */

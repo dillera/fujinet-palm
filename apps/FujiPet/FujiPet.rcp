@@ -1,0 +1,126 @@
+#include "FujiPetRsc.h"
+
+VERSION ID 1 "0.1"
+
+ICONFAMILYEX
+BEGIN
+    BITMAP "icon.bmp" BPP 1
+END
+
+/* Drawn by the app: the icon bars, the pet and its things. */
+FORM ID MainForm AT (0 0 160 160)
+NOFRAME
+USABLE
+MENUID MainMenu
+BEGIN
+    LIST "Meal" "Snack" ID MainFeedList AT (4 18 44 AUTO) NONUSABLE VISIBLEITEMS 2
+END
+
+FORM ID NewPetForm AT (0 0 160 160)
+NOFRAME
+USABLE
+BEGIN
+    TITLE "New FujiPet"
+    LABEL "Name your pet:" AUTOID AT (2 18) FONT 1
+    FIELD ID NewNameField AT (4 31 72 12) UNDERLINED SINGLELINE MAXCHARS 10
+    LABEL "Pick a type:" AUTOID AT (2 49) FONT 1
+    LIST "Cat" "Dog" "Bunny" "Dino" ID NewTypeList AT (4 62 54 AUTO) VISIBLEITEMS 4
+    BUTTON "Hatch!" ID NewHatchButton AT (1 147 AUTO AUTO)
+    BUTTON "Cancel" ID NewCancelButton AT (PREVRIGHT+4 147 AUTO AUTO)
+    GRAFFITISTATEINDICATOR AT (150 148)
+END
+
+FORM ID FriendsForm AT (0 0 160 160)
+NOFRAME
+USABLE
+MENUID MainMenu
+BEGIN
+    TITLE "FujiPet Friends"
+    LIST "" ID FriendsList AT (0 28 160 55) VISIBLEITEMS 5
+    LABEL "Say:" AUTOID AT (1 87)
+    POPUPTRIGGER "Hi, friend!" ID FriendsSayTrigger AT (21 87 AUTO AUTO) LEFTANCHOR
+    LIST "Hi, friend!" "Want to play?" "I'm hungry!" "You're the best!" "Let's be pals!"
+         "Yay! Hooray!" "Good night!" "Bye bye!" ID FriendsSayList AT (21 60 80 AUTO)
+         NONUSABLE VISIBLEITEMS 8
+    POPUPLIST ID FriendsSayTrigger FriendsSayList
+    BUTTON "Send" ID FriendsSendButton AT (126 86 32 12)
+    BUTTON "Done" ID FriendsDoneButton AT (1 147 AUTO AUTO)
+    BUTTON "Refresh" ID FriendsRefreshButton AT (PREVRIGHT+4 147 AUTO AUTO)
+    BUTTON "Register" ID FriendsRegisterButton AT (PREVRIGHT+4 147 AUTO AUTO)
+END
+
+FORM ID StatusForm AT (2 14 156 144)
+MODAL
+USABLE
+BEGIN
+    TITLE "Status"
+    BUTTON "Done" ID StatusDoneButton AT (4 127 36 12)
+END
+
+FORM ID SettingsForm AT (2 44 156 114)
+MODAL
+USABLE
+BEGIN
+    TITLE "Settings"
+    LABEL "Friend server (host:port):" AUTOID AT (4 16)
+    FIELD ID SettingsServerField AT (6 29 144 12) UNDERLINED SINGLELINE MAXCHARS 47
+    LABEL "Time:" AUTOID AT (4 47)
+    PUSHBUTTON "Normal" ID SettingsNormalPush AT (32 46 38 12) GROUP 1
+    PUSHBUTTON "Fast" ID SettingsFastPush AT (PREVRIGHT+1 46 36 12) GROUP 1
+    PUSHBUTTON "Turbo" ID SettingsTurboPush AT (PREVRIGHT+1 46 40 12) GROUP 1
+    CHECKBOX "Meet friends online" ID SettingsOnlineCheck AT (4 63 AUTO AUTO)
+    CHECKBOX "Sounds" ID SettingsSoundCheck AT (4 77 AUTO AUTO)
+    BUTTON "OK" ID SettingsOKButton AT (4 97 36 12)
+    BUTTON "Cancel" ID SettingsCancelButton AT (PREVRIGHT+6 97 AUTO 12)
+    GRAFFITISTATEINDICATOR AT (140 98)
+END
+
+MENU ID MainMenu
+BEGIN
+    PULLDOWN "Pet"
+    BEGIN
+        MENUITEM "Status" ID MainMenuStatus "S"
+        MENUITEM "Friends" ID MainMenuFriends "F"
+        MENUITEM SEPARATOR
+        MENUITEM "New Egg..." ID MainMenuNewEgg
+    END
+    PULLDOWN "Options"
+    BEGIN
+        MENUITEM "Settings..." ID MainMenuSettings
+        MENUITEM "Reconnect" ID MainMenuReconnect "R"
+        MENUITEM SEPARATOR
+        MENUITEM "About" ID MainMenuAbout
+    END
+END
+
+ALERT ID RomIncompatibleAlert
+ERROR
+BEGIN
+    TITLE "FN FujiPet"
+    MESSAGE "This app needs Palm OS 3.3 or later."
+    BUTTONS "OK"
+END
+
+ALERT ID MessageAlert
+INFORMATION
+BEGIN
+    TITLE "FN FujiPet"
+    MESSAGE "^1^2^3"
+    BUTTONS "OK"
+END
+
+ALERT ID NewEggAlert
+CONFIRMATION
+BEGIN
+    TITLE "New Egg"
+    MESSAGE "Start over with a new egg? ^1 will be gone for good."
+    BUTTONS "New Egg" "Cancel"
+END
+
+ALERT ID AboutAlert
+INFORMATION
+BEGIN
+    TITLE "FN FujiPet"
+    MESSAGE "A virtual pet that grows like the 1996 original: egg, baby, child, teen, adult and, with good care, senior.\n\nThrough FujiNet's N1:, pets meet on a FujiPet friend server and send each other messages."
+    BUTTONS "OK"
+END

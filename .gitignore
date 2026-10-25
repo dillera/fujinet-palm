@@ -15,3 +15,7 @@ tests/lobbyjson_test
 apps/FujiLobby/FujiLobby
 tests/holdem_test
 apps/Holdem/Holdem
+tests/fujipet_test
+apps/FujiPet/FujiPet
+fujipet-pets.json
+__pycache__/
