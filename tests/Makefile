@@ -1,5 +1,6 @@
-# Desktop tests for the shared C code. FW points at a fujinet-firmware checkout.
-FW ?= ../../fujinet-firmware
+# Desktop tests for the shared C code. FW points at a fujinet-firmware checkout:
+# next to this repository, or in classic/ beside a nio/ checkout of it.
+FW ?= $(firstword $(wildcard ../../fujinet-firmware ../../../classic/fujinet-firmware) ../../fujinet-firmware)
 CFLAGS = -std=c89 -pedantic -Wall -Wextra -I../common
 CXXFLAGS = -std=c++20 -Wall -I../common -I$(FW)/include -I$(FW)/lib -I$(FW)/lib/bus
 
