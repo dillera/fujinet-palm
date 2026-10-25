@@ -48,11 +48,24 @@ static void ShowError(const char *what, Err err)
     ShowMessage(what, detail);
 }
 
+/* Palm OS 3.1 draws a new title without erasing the old one, so a shorter
+ * title would leave the end of a longer one showing. */
+static void SetFormTitle(FormType *form, char *title)
+{
+    RectangleType r;
+
+    if (FrmVisible(form)) {
+        RctSetRectangle(&r, 0, 0, 160, 12);
+        WinEraseRectangle(&r, 0);
+    }
+    FrmSetTitle(form, title);
+}
+
 static void SetBusy(FormType *form, const char *title)
 {
     StrNCopy(gTitle, title, TITLE_LEN - 1);
     gTitle[TITLE_LEN - 1] = '\0';
-    FrmSetTitle(form, gTitle);
+    SetFormTitle(form, gTitle);
 }
 
 static Boolean EndsWith(const char *s, const char *suffix)
@@ -236,7 +249,7 @@ static void BrowseLoad(FormType *form)
     err = ReadDirectory(gSlot, gPath, false);
     StrPrintF(gTitle, "%s:", gHosts[gSlot]);
     StrNCat(gTitle, gPath, TITLE_LEN);
-    FrmSetTitle(form, gTitle);
+    SetFormTitle(form, gTitle);
     LstSetListChoices(list, gChoices, gCount);
     LstSetSelection(list, noListSelection);
     LstDrawList(list);

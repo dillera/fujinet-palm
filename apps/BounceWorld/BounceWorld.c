@@ -795,6 +795,19 @@ static void ConnectShow(FormType *form)
     FrmSetFocus(form, FrmGetObjectIndex(form, ConnectHostField));
 }
 
+/* Palm OS 3.1 draws a new title without erasing the old one, so a shorter
+ * title would leave the end of a longer one showing. */
+static void SetFormTitle(FormType *form, char *title)
+{
+    RectangleType r;
+
+    if (FrmVisible(form)) {
+        RctSetRectangle(&r, 0, 0, 160, 12);
+        WinEraseRectangle(&r, 0);
+    }
+    FrmSetTitle(form, title);
+}
+
 static void ConnectStart(FormType *form)
 {
     char what[HOST_LEN + PORT_LEN + 20];
@@ -802,10 +815,10 @@ static void ConnectStart(FormType *form)
 
     SavePrefs(form);
     StrCopy(gTitle, "Connecting...");
-    FrmSetTitle(form, gTitle);
+    SetFormTitle(form, gTitle);
     err = Connect();
-    StrCopy(gTitle, "Bounce World");
-    FrmSetTitle(form, gTitle);
+    StrCopy(gTitle, "FN Bounce World");
+    SetFormTitle(form, gTitle);
     if (err != errNone) {
         StrPrintF(what, "Could not join %s:%s.", gPrefs.host, gPrefs.port);
         ShowError(what, err);

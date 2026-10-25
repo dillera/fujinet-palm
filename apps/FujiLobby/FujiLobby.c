@@ -430,10 +430,23 @@ static void OpenDetail(Int16 item)
     FrmPopupForm(DetailForm);
 }
 
+/* Palm OS 3.1 draws a new title without erasing the old one, so a shorter
+ * title would leave the end of a longer one showing. */
+static void SetFormTitle(FormType *form, char *title)
+{
+    RectangleType r;
+
+    if (FrmVisible(form)) {
+        RctSetRectangle(&r, 0, 0, 160, 12);
+        WinEraseRectangle(&r, 0);
+    }
+    FrmSetTitle(form, title);
+}
+
 static void SetTitle(FormType *form)
 {
     StrCopy(gTitle, gPrefs.useQA ? "FN QA Lobby" : "FN Lobby");
-    FrmSetTitle(form, gTitle);
+    SetFormTitle(form, gTitle);
 }
 
 static void ToggleQA(void)
