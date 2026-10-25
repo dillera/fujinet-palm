@@ -51,3 +51,24 @@ and sends, whenever it happens:
 (`MESSAGES` in the server, the same list in `apps/FujiPet/petproto.c`). A
 client that sends nothing for 90 seconds is dropped, so the app sends `PING`
 every 20. `tests/fujipet_server_test.py` exercises all of it.
+
+## Deploying
+
+`deploy/` runs the server as a systemd service, the way the other services on
+`actual` run, behind the FRP client there:
+
+```sh
+tools/fujipet-server/deploy/deploy.sh actual    # copy to ~/_services/fujipet, install, (re)start
+```
+
+On the host, `~/_services/fujipet/fujipetctl` starts and stops it:
+`fujipetctl start | stop | restart | status | logs`, and `install` or
+`uninstall` for the unit. The pets are kept in `~/_services/fujipet/data/`
+and survive a redeploy.
+
+Once per host, `deploy/frpc-fujipet.toml` goes on the end of
+`~/_services/frpc/frpc.toml` (then `sudo systemctl restart frpc`): TCP 7878
+straight through for the Palms, and `fujipet.diller.org` for the status page.
+DNS needs `fujipet.diller.org` as a CNAME of the frps edge, and the edge's
+firewall must let TCP 7878 in. Palms then use `fujipet.diller.org:7878` in
+**Options > Settings**.

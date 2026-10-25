@@ -1,0 +1,31 @@
+#!/bin/sh
+# Start, stop and look after the FujiPet friend server on the deploy host.
+#   fujipetctl install    install or update the systemd unit, enable and start it
+#   fujipetctl start | stop | restart | status
+#   fujipetctl logs       follow the server's log
+#   fujipetctl uninstall  stop and remove the unit (the pets in data/ stay)
+set -e
+UNIT=fujipet.service
+HERE=$(cd "$(dirname "$0")" && pwd)
+
+case "$1" in
+install)
+    mkdir -p "$HERE/data"
+    sudo install -m 644 "$HERE/$UNIT" /etc/systemd/system/$UNIT
+    sudo systemctl daemon-reload
+    sudo systemctl enable $UNIT
+    sudo systemctl restart $UNIT
+    systemctl --no-pager status $UNIT | head -5 ;;
+start|stop|restart)
+    sudo systemctl "$1" $UNIT ;;
+status)
+    systemctl --no-pager status $UNIT ;;
+logs)
+    journalctl -u $UNIT -f ;;
+uninstall)
+    sudo systemctl disable --now $UNIT
+    sudo rm -f /etc/systemd/system/$UNIT
+    sudo systemctl daemon-reload ;;
+*)
+    sed -n '2,7p' "$0"; exit 2 ;;
+esac

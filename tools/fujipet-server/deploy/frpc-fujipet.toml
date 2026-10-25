@@ -1,0 +1,17 @@
+# Append to ~/_services/frpc/frpc.toml on the deploy host, then restart frpc.
+# DNS: fujipet.diller.org CNAME qix.diller.org (the frps edge).
+
+# The friend server's line protocol: Palms connect to fujipet.diller.org:7878.
+[[proxies]]
+name		= "fujipet-tcp"
+type		= "tcp"
+localPort	= 7878
+remotePort	= 7878
+
+# The status page: http://fujipet.diller.org/
+[[proxies]]
+name		= "fujipet http"
+type		= "http"
+localPort	= 7879
+customDomains	= ["fujipet.diller.org"]
+hostHeaderRewrite = "fujipet.diller.org"

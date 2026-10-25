@@ -1,0 +1,24 @@
+[Unit]
+Description=FujiPet Friend Server
+Documentation=https://github.com/dillera/fujinet-palm/tree/classic/tools/fujipet-server
+After=network.target
+
+[Service]
+Type=simple
+User=dillera
+WorkingDirectory=/home/dillera/_services/fujipet
+# An empty --host listens on every interface, IPv4 and IPv6.
+ExecStart=/usr/bin/python3 -u /home/dillera/_services/fujipet/fujipet_server.py --host= --port 7878 --http-port 7879 --data /home/dillera/_services/fujipet/data/pets.json
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fujipet
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/dillera/_services/fujipet/data
+
+[Install]
+WantedBy=multi-user.target
