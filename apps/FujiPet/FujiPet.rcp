@@ -1,6 +1,6 @@
 #include "FujiPetRsc.h"
 
-VERSION ID 1 "0.1"
+VERSION ID 1 "0.2"
 
 ICONFAMILYEX
 BEGIN
@@ -96,7 +96,7 @@ END
 ALERT ID RomIncompatibleAlert
 ERROR
 BEGIN
-    TITLE "FN FujiPet"
+    TITLE "FI FujiPet"
     MESSAGE "This app needs Palm OS 3.1 or later."
     BUTTONS "OK"
 END
@@ -104,7 +104,7 @@ END
 ALERT ID MessageAlert
 INFORMATION
 BEGIN
-    TITLE "FN FujiPet"
+    TITLE "FI FujiPet"
     MESSAGE "^1^2^3"
     BUTTONS "OK"
 END
@@ -120,7 +120,7 @@ END
 ALERT ID AboutAlert
 INFORMATION
 BEGIN
-    TITLE "FN FujiPet"
-    MESSAGE "A virtual pet that grows like the 1996 original: egg, baby, child, teen, adult and, with good care, senior.\n\nThrough FujiNet's N1:, pets meet on a FujiPet friend server and send each other messages."
+    TITLE "FI FujiPet"
+    MESSAGE "A virtual pet that grows like the 1996 original: egg, baby, child, teen, adult and, with good care, senior.\n\nThrough a FujiNet NIO, pets meet on a FujiPet friend server and send each other messages."
     BUTTONS "OK"
 END

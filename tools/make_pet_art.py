@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draws FN FujiPet's art: writes apps/FujiPet/petart.h and the launcher icon.
+"""Draws FI FujiPet's art: writes apps/FujiPet/petart.h and the launcher icon.
 
 Every sprite is 16x16 with four values a pixel: '.' clear, '#' outline,
 'o' body and '+' accent. The app picks the body and accent colours (the
@@ -902,7 +902,7 @@ def packed(rows):
 
 def write_header(path, sprites):
     lines = [
-        "/* FN FujiPet's sprites, written by tools/make_pet_art.py: edit that, not this. */",
+        "/* FI FujiPet's sprites, written by tools/make_pet_art.py: edit that, not this. */",
         "#ifndef PETART_H", "#define PETART_H", "",
         "/* 16x16, 2 bits a pixel (0 clear, 1 outline, 2 body, 3 accent), the leftmost",
         " * pixel in the top bits, four bytes a row. */",

@@ -1,4 +1,4 @@
-/* FN FujiPet for Palm OS.
+/* FI FujiPet for Palm OS.
  *
  * A virtual pet that grows up like the 1996 original (see pet.h), drawn in
  * the type's colours on a colour Palm (OS 3.5 and later, 256 colours) and
@@ -6,15 +6,16 @@
  * (tools/make_pet_art.py). The pet's life runs on while the app is closed:
  * on the next launch it catches up on the time that passed.
  *
- * Through FujiNet's N1: device the app keeps a TCP connection to a FujiPet
- * friend server (tools/fujipet-server), where the pet can register, see
- * which other pets are registered and which are online, and send the ones
- * online canned messages that arrive at once. The server's line protocol is
- * read by petproto.c.
+ * Through a FujiNet NIO on the cradle (fujinet-nio-lib) the app keeps a TCP
+ * connection to a FujiPet friend server (tools/fujipet-server), where the
+ * pet can register, see which other pets are registered and which are
+ * online, and send the ones online canned messages that arrive at once. The
+ * server's line protocol is read by petproto.c.
  */
 #include <PalmOS.h>
 
-#include "fnnet.h"
+#include "fn_types.h"
+#include "fujinet-nio.h"
 #include "pet.h"
 #include "petproto.h"
 #include "petart.h"
@@ -28,13 +29,18 @@
 #define DEFAULT_SERVER "localhost:7878"
 #endif
 #define SERVER_LEN 48
-#define NET_UNIT 1
+#define DEFAULT_PORT 7878
+/* Largest READ; with its header it fits the library's 512-byte packet. */
+#define NET_CHUNK 256
+/* A lost reply is asked for again this many times in all. */
+#define NET_TRIES 3
 
 #define TICK_TICKS (SysTicksPerSecond() / 4)
 #define FRAME_TICKS (SysTicksPerSecond() / 2)
 #define POLL_TICKS (SysTicksPerSecond() / 2)
 #define PING_TICKS (SysTicksPerSecond() * 20)
 #define RETRY_TICKS (SysTicksPerSecond() * 60)
+#define CONNECT_TICKS (SysTicksPerSecond() * 10)
 #define BUBBLE_TICKS (SysTicksPerSecond() * 8)
 #define NOTICE_TICKS (SysTicksPerSecond() * 3)
 #define CHEER_TICKS (SysTicksPerSecond() * 60)
@@ -160,12 +166,14 @@ static PpReader gReader;
 static PpFriends gFriends;
 static UInt32 gNextPoll, gNextPing, gNextRetry, gNextCheer;
 static UInt8 gFailures;
+static fn_handle_t gHandle = FN_INVALID_HANDLE;
+static UInt32 gReadAt, gWriteAt;
 static UInt8 gSentStage = 0xFF, gSentAge = 0xFF;
 static char gNetText[32] = "Offline";
 static char gLog[LOG_LINES][LOG_LEN];
 static UInt8 gLogCount;
 static UInt8 gSayCode;
-static UInt8 gReadBuf[FN_NET_CHUNK];
+static UInt8 gReadBuf[NET_CHUNK];
 
 static void DrawMain(void);
 static void FriendsChanged(void);
@@ -646,16 +654,45 @@ static void CatchUp(Boolean quiet)
 
 /* ---- The friend server ----------------------------------------------- */
 
-static Err NetSend(const char *line)
+static void NetDrop(const char *why);
+
+/* A reply lost on the cradle line, or cut short on it. */
+static Boolean LostReply(uint8_t result)
+{
+    return result == FN_ERR_TIMEOUT || result == FN_ERR_TRANSPORT || result == FN_ERR_IO;
+}
+
+/* Sends a line. A WRITE whose reply was lost is sent again at the same
+ * offset; NIO acknowledges a repeat without sending the bytes to the server
+ * twice. Until the connection is up a WRITE is not ready, so the first one
+ * waits for the connect. A line that cannot be sent leaves the stream out
+ * of step, so the connection is dropped. */
+static void NetSend(const char *line)
 {
     char buf[LINE_LEN + 1];
     UInt16 len = StrLen(line);
+    UInt32 deadline = TimGetTicks() + CONNECT_TICKS;
+    uint16_t written;
+    uint8_t result;
+    UInt8 tries = 0;
 
     if (gNet == NET_OFF || len >= LINE_LEN)
-        return fnErrTooBig;
+        return;
     StrCopy(buf, line);
     buf[len] = '\n';
-    return FnNetWrite(NET_UNIT, buf, len + 1);
+    for (;;) {
+        result = fn_write(gHandle, gWriteAt, (const uint8_t *)buf, len + 1, &written);
+        if (result == FN_OK) {
+            gWriteAt += written;
+            return;
+        }
+        if ((result == FN_ERR_NOT_READY || result == FN_ERR_BUSY) && !Due(deadline))
+            SysTaskDelay(POLL_TICKS);
+        else if (!LostReply(result) || ++tries >= NET_TRIES)
+            break;
+    }
+    NetDrop(result == FN_ERR_TIMEOUT || result == FN_ERR_TRANSPORT ? "Lost FujiNet"
+                                                                  : "The server hung up");
 }
 
 static void SendPet(const char *verb)
@@ -680,7 +717,8 @@ static void NetClose(void)
     UInt8 i;
 
     if (gNet != NET_OFF)
-        FnNetClose(NET_UNIT);
+        fn_close(gHandle);
+    gHandle = FN_INVALID_HANDLE;
     gNet = NET_OFF;
     for (i = 0; i < gFriends.count; i++)
         gFriends.list[i].online = 0;
@@ -689,16 +727,18 @@ static void NetClose(void)
 
 static void NetDrop(const char *why)
 {
-    NetClose();
+    /* Before NetClose redraws the friends screen with it. */
     StrCopy(gNetText, why);
+    NetClose();
     gNextRetry = TimGetTicks() + RETRY_TICKS / 2;
 }
 
+/* Opens the server's TCP port; the first line sent waits for the connect,
+ * and fails if the server is not there. */
 static void NetConnect(void)
 {
-    char url[SERVER_LEN + 16], line[LINE_LEN];
-    FnNetStatus status;
-    Err err;
+    char host[SERVER_LEN], line[LINE_LEN], *port;
+    uint8_t result;
 
     NetClose();
     if (!gP.online || !gPortOpen)
@@ -706,33 +746,34 @@ static void NetConnect(void)
     StrCopy(gNetText, "Connecting...");
     DrawMain();
     FriendsChanged();
-    StrPrintF(url, "N1:TCP://%s/", gP.server);
-    err = FnNetOpen(NET_UNIT, url, FN_NET_READ_WRITE, FN_NET_TRANS_NONE);
-    if (err == errNone)
-        err = FnNetGetStatus(NET_UNIT, &status);
-    gNoFujiNet = err == fnErrNoReply;
-    if (err != errNone || !status.connected) {
-        if (err != fnErrNoReply)
-            FnNetClose(NET_UNIT);
+    StrCopy(host, gP.server);
+    if ((port = StrChr(host, ':')) != NULL)
+        *port++ = '\0';
+    result = fn_tcp_open(&gHandle, host, port ? (uint16_t)StrAToI(port) : DEFAULT_PORT);
+    gNoFujiNet = result == FN_ERR_TIMEOUT || result == FN_ERR_TRANSPORT;
+    if (result == FN_OK) {
+        gNet = NET_UP;
+        gReadAt = gWriteAt = 0;
+        if (gP.petId) {
+            StrPrintF(line, "HELLO|%u|%s|%u|%u", gP.petId, gP.key, gP.pet.stage,
+                      (UInt16)(pet_age_days(&gP.pet) > 99 ? 99 : pet_age_days(&gP.pet)));
+            NetSend(line);
+        } else {
+            NetSend("LIST");
+        }
+    }
+    if (gNet == NET_OFF) {
         StrCopy(gNetText, gNoFujiNet ? "No FujiNet in the cradle" : "No friend server");
         gNextRetry = TimGetTicks() + RETRY_TICKS;
         FriendsChanged();
         return;
     }
-    gNet = NET_UP;
     gFailures = 0;
     gFriends.count = 0;
     pp_reader_reset(&gReader);
     StrCopy(gNetText, "Online");
     gNextPoll = TimGetTicks();
     gNextPing = TimGetTicks() + PING_TICKS;
-    if (gP.petId) {
-        StrPrintF(line, "HELLO|%u|%s|%u|%u", gP.petId, gP.key, gP.pet.stage,
-                  (UInt16)(pet_age_days(&gP.pet) > 99 ? 99 : pet_age_days(&gP.pet)));
-        NetSend(line);
-    } else {
-        NetSend("LIST");
-    }
     FriendsChanged();
 }
 
@@ -856,34 +897,46 @@ static void NetLine(char *line)
     FriendsChanged();
 }
 
+/* Reads what the server sent. READ is non-blocking: NOT_READY means nothing
+ * has come, and the next poll asks again. A READ whose reply was lost is
+ * sent again at the same offset and size; NIO answers a repeat with the
+ * same bytes, so none are lost or read twice. */
 static void NetPoll(void)
 {
-    FnNetStatus status;
-    UInt16 got, i, want, reads;
-    Err err;
+    uint16_t got, i;
+    uint8_t flags, result;
+    UInt8 reads = 0, tries = 0;
 
-    for (reads = 0; reads < READS_PER_POLL; reads++) {
-        err = FnNetGetStatus(NET_UNIT, &status);
-        if (err != errNone) {
+    while (reads < READS_PER_POLL) {
+        result = fn_read(gHandle, gReadAt, gReadBuf, sizeof(gReadBuf), &got, &flags);
+        if (LostReply(result) && ++tries < NET_TRIES)
+            continue;
+        if (result == FN_ERR_NOT_READY) {
+            gFailures = 0;
+            return;
+        }
+        if (result == FN_ERR_TIMEOUT || result == FN_ERR_TRANSPORT) {
+            /* No answer: FujiNet may be busy; give up after a few polls. */
             if (++gFailures >= NET_FAILURES)
                 NetDrop("Lost FujiNet");
             return;
         }
+        if (result != FN_OK || (got == 0 && (flags & FN_READ_EOF)) || got > sizeof(gReadBuf)) {
+            NetDrop("The server hung up");
+            return;
+        }
         gFailures = 0;
-        if (status.avail == 0) {
-            if (!status.connected)
-                NetDrop("The server hung up");
+        tries = 0;
+        reads++;
+        if (got == 0)
             return;
-        }
-        want = status.avail < sizeof(gReadBuf) ? status.avail : sizeof(gReadBuf);
-        if (FnNetRead(NET_UNIT, gReadBuf, want, &got) != errNone) {
-            /* Bytes lost: the line they were in is spoilt. */
-            gReader.overflow = 1;
-            return;
-        }
+        gReadAt += got;
         for (i = 0; i < got; i++)
-            if (pp_reader_push(&gReader, gReadBuf[i]))
+            if (pp_reader_push(&gReader, gReadBuf[i])) {
                 NetLine(gReader.line);
+                if (gNet == NET_OFF)
+                    return;
+            }
     }
 }
 
@@ -1800,7 +1853,7 @@ static void AppStart(void)
     LoadPrefs();
     gColour = OpenColour();
     gOffscreen = WinCreateOffscreenWindow(160, 160, screenFormat, &err);
-    gPortOpen = FnOpen() == errNone;
+    gPortOpen = fn_init() == FN_OK;
     if (!gPortOpen)
         StrCopy(gNetText, "Cradle port busy");
     CatchUp(true);
@@ -1813,7 +1866,7 @@ static void AppStop(void)
     FrmCloseAllForms();
     NetClose();
     SavePrefs();
-    FnClose();
+    fn_shutdown();
     if (gOffscreen)
         WinDeleteWindow(gOffscreen, false);
     gOffscreen = NULL;

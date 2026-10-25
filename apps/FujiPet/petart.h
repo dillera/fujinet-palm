@@ -1,4 +1,4 @@
-/* FN FujiPet's sprites, written by tools/make_pet_art.py: edit that, not this. */
+/* FI FujiPet's sprites, written by tools/make_pet_art.py: edit that, not this. */
 #ifndef PETART_H
 #define PETART_H
 

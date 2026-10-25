@@ -13,7 +13,7 @@ all: $(APPS:%=apps/%/icon.bmp)
 apps/%/icon.bmp: tools/make_icon.py
 	python3 tools/make_icon.py $@
 
-# FN FujiPet draws its own icon, with its sprites.
+# FI FujiPet draws its own icon, with its sprites.
 apps/FujiPet/icon.bmp apps/FujiPet/petart.h: tools/make_pet_art.py
 	python3 tools/make_pet_art.py
 

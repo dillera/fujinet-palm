@@ -1,6 +1,6 @@
 APP     = FujiPet
-NAME    = "FN FujiPet"
-CREATOR = ADFP
-COMMON_EXTRA = fnnet.c
+NAME    = "FI FujiPet"
+CREATOR = ANFP
+NIO     = 1
 SOURCES_EXTRA = pet.c petproto.c
 include ../app.mk
