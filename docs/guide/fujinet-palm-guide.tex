@@ -26,6 +26,9 @@
 \newfontfamily\heavyfont{Avenir Next Heavy}
 \newfontfamily\demifont{Avenir Next Demi Bold}
 \newfontfamily\condfont{Avenir Next Condensed Demi Bold}
+\newfontfamily\futurabold{Futura Bold}
+\newfontfamily\futuramed{Futura Medium}
+\newfontfamily\futuracond{Futura Condensed Medium}
 
 % ---- Colours --------------------------------------------------------------
 \definecolor{navy}{HTML}{14213D}
@@ -39,6 +42,14 @@
 \definecolor{bezellight}{HTML}{6B717B}
 \definecolor{paper}{HTML}{F6F4EF}
 \definecolor{rule}{HTML}{C9CED6}
+% The cover's 1970s palette.
+\definecolor{cream}{HTML}{F2E9D8}
+\definecolor{umber}{HTML}{3E2417}
+\definecolor{band1}{HTML}{2C6E68}
+\definecolor{band2}{HTML}{E3A72F}
+\definecolor{band3}{HTML}{DC7230}
+\definecolor{band4}{HTML}{B9412C}
+\definecolor{band5}{HTML}{6A2C1C}
 
 % ---- Headings, headers ------------------------------------------------------
 \titleformat{\chapter}[display]
@@ -129,88 +140,61 @@
 \begin{titlepage}
 \newgeometry{margin=0pt}
 \thispagestyle{empty}
-\begin{tikzpicture}[remember picture,overlay]
-  % Night-sky background with the go-board grid of the FujiNet logo.
-  \shade[top color=navy,bottom color=ink!70!black,middle color=navy!85!nioteal]
-    (current page.south west) rectangle (current page.north east);
+\begin{tikzpicture}[remember picture,overlay,
+    % The wave the serial line grows into once the byte is sent: t cm past the stop bit.
+    declare function={wave(\t)=0.045*\t*\t+1.7*(\t/12.5)*sin(deg(0.72*\t));}]
   \begin{scope}[shift={(current page.south west)}]
-    \foreach \x in {0,1.4,...,22}{\draw[white,opacity=0.06,line width=0.5pt] (\x,0) -- (\x,28);}
-    \foreach \y in {0,1.4,...,28}{\draw[white,opacity=0.06,line width=0.5pt] (0,\y) -- (22,\y);}
-    \foreach \x/\y/\c in {20.2/26.2/white,15.4/25.2/fujired,18.2/19.6/white,1.4/12.6/fujired,
-                          19.6/8.4/white,4.2/4.2/white,16.8/2.8/fujired,19.8/14.0/white}{
-      \fill[\c,opacity=0.18] (\x,\y) circle (0.42);}
-  \end{scope}
+  \fill[cream] (0,0) rectangle (21.59,27.94);
+
+  % Masthead: series on the left, manual number on the right, a double rule.
+  \node[anchor=base west,text=umber,font=\futurabold\large] at (1.6,26.0)
+    {\addfontfeature{LetterSpace=18}FUJINET};
+  \node[anchor=base west,text=umber!80,font=\futuracond\large] at (4.55,26.0)
+    {\addfontfeature{LetterSpace=8}PALM OS SERIES};
+  \node[anchor=base east,text=umber!80,font=\futuracond\large] at (20.0,26.0)
+    {\addfontfeature{LetterSpace=8}MANUAL FN-PALM-1};
+  \fill[umber] (1.6,25.55) rectangle (20.0,25.68);
+  \fill[umber] (1.6,25.38) rectangle (20.0,25.43);
 
   % Title.
-  \node[anchor=north west,text=fujired,font=\demifont\Large] at ($(current page.north west)+(1.6,-1.9)$)
-    {FUJINET \textbullet\ PALM OS};
-  \node[anchor=north west,text=white,font=\heavyfont\fontsize{54}{56}\selectfont,align=left]
-    at ($(current page.north west)+(1.5,-2.6)$) {The FujiNet\\Palm Guide};
-  \node[anchor=north west,text=white!80!navy,font=\sffamily\Large,align=left,text width=17cm]
-    at ($(current page.north west)+(1.6,-7.0)$)
-    {HotSync, TNFS and network apps for the Palm in your cradle,\\on FujiNet Classic and FujiNet NIO};
+  \node[anchor=north west,text=umber,font=\futurabold\fontsize{60}{62}\selectfont,align=left]
+    at (1.45,24.7) {The FujiNet\\Palm Guide};
+  \node[anchor=north west,text=umber!85,font=\futuramed\Large,align=left,text width=17cm]
+    at (1.6,19.6)
+    {HotSync, TNFS and network apps for the Palm in your cradle,\\
+     on FujiNet Classic and FujiNet NIO};
 
-  % The Palm, in its cradle, tilted a little.
-  \begin{scope}[shift={($(current page.south west)+(7.4,6.0)$)},rotate=-6]
-    % cradle
-    \fill[black,opacity=.35] (-0.7,-1.95) ellipse (5.4 and 0.45);
-    \shade[top color=bezellight,bottom color=bezel!70!black,rounded corners=10pt]
-      (-4.4,-1.9) -- (4.4,-1.9) -- (3.9,0.4) -- (-3.9,0.4) -- cycle;
-    \fill[black!70] (-3.3,0.2) rectangle (3.3,0.55);
-    \shade[inner color=white,outer color=bezellight] (2.5,-0.75) circle (0.32);
-    \draw[ink,line width=1.1pt,->] (2.5,-0.75) ++(40:0.18) arc (40:300:0.18);
-    % body
-    \shade[left color=bezel,right color=bezellight,middle color=bezellight!80!white,rounded corners=26pt]
-      (-3.6,0.3) rectangle (3.6,11.6);
-    \draw[white,opacity=.25,line width=1pt,rounded corners=26pt] (-3.6,0.3) rectangle (3.6,11.6);
-    \node[text=white!85!bezel,font=\demifont\small] at (0,11.0) {FujiNet};
-    % screen glass and LCD
-    \fill[black!85,rounded corners=6pt] (-3.0,4.25) rectangle (3.0,10.45);
-    \fill[lcd] (-2.65,4.6) rectangle (2.65,10.1);
-    % Palm OS style title tab
-    \fill[black] (-2.65,9.62) rectangle (0.2,10.1);
-    \node[anchor=west,text=lcd,font=\demifont\footnotesize] at (-2.55,9.86) {FujiNet};
-    \draw[black,line width=1.4pt] (0.2,9.64) -- (2.65,9.64);
-    \node at (0,8.0) {\includegraphics[width=4.7cm]{art/fujinet-logo.pdf}};
-    \node[font=\ttfamily\small,text=black!85,align=center] at (0,6.25)
-      {HotSync \;\textbullet\; TNFS\\ FN Classic \;\textbullet\; FI NIO};
-    \draw[black,line width=0.8pt,rounded corners=2pt] (-2.2,4.85) rectangle (-0.6,5.35);
-    \node[font=\sffamily\scriptsize,text=black] at (-1.4,5.1) {Ping};
-    \draw[black,line width=0.8pt,rounded corners=2pt] (0.6,4.85) rectangle (2.2,5.35);
-    \node[font=\sffamily\scriptsize,text=black] at (1.4,5.1) {HotSync};
-    % Graffiti area
-    \draw[white!70!bezel,line width=0.7pt,rounded corners=3pt] (-2.9,1.95) rectangle (2.9,3.95);
-    \draw[white!70!bezel,line width=0.7pt] (-2.0,2.05) rectangle (-0.05,3.85);
-    \draw[white!70!bezel,line width=0.7pt] (0.05,2.05) rectangle (2.0,3.85);
-    \foreach \y in {2.45,3.4}{\draw[white!70!bezel,line width=0.7pt] (-2.45,\y) circle (0.2);
-                               \draw[white!70!bezel,line width=0.7pt] (2.45,\y) circle (0.2);}
-    % buttons and rocker
-    \foreach \x in {-2.55,-1.45,1.45,2.55}{
-      \shade[inner color=bezellight!60!white,outer color=bezel] (\x,1.15) circle (0.38);}
-    \shade[inner color=bezellight!60!white,outer color=bezel] (0,1.15) ellipse (0.55 and 0.32);
-    \draw[bezel,line width=0.8pt] (-0.5,1.15) -- (0.5,1.15);
+  % Five bands. They leave the left edge as an RS-232 frame -- start bit, the
+  % letter P (0x50, least significant bit first), stop bit -- and grow into a wave.
+  \def\H{9.1}\def\A{1.1}\def\bw{0.72}
+  \def\steps{1.2/1,1.2/0,5.2/0,5.2/1,6.0/1,6.0/0,6.8/0,6.8/1,7.6/1,7.6/0,8.4/0,8.4/1,9.2/1}
+  \def\backsteps{9.2/1,8.4/1,8.4/0,7.6/0,7.6/1,6.8/1,6.8/0,6.0/0,6.0/1,5.2/1,5.2/0,1.2/0,1.2/1,0/1}
+  \foreach \c [count=\i from 0] in {band1,band2,band3,band4,band5}{
+    \pgfmathsetmacro\top{\H-\i*\bw}
+    \pgfmathsetmacro\bot{\H-(\i+1)*\bw}
+    \fill[\c] (0,\top)
+      \foreach \x/\l in \steps {-- (\x,\top-\A+\l*\A)}
+      -- plot[domain=0:12.5,samples=150] ({9.2+\x},{\top+wave(\x)})
+      -- plot[domain=12.5:0,samples=150] ({9.2+\x},{\bot+wave(\x)})
+      \foreach \x/\l in \backsteps {-- (\x,\bot-\A+\l*\A)}
+      -- cycle;
+  }
+  % The bits, labelled over their cells like a timing diagram.
+  \foreach \x/\b in {0.6/{},1.6/ST,2.4/0,3.2/0,4.0/0,4.8/0,5.6/1,6.4/0,7.2/1,8.0/0,8.8/SP}{
+    \node[text=umber!70,font=\ttfamily\scriptsize] at (\x,\H+0.38) {\b};}
+  \foreach \x in {1.2,2.0,...,9.3}{
+    \draw[umber!45,line width=0.4pt] (\x,\H+0.15) -- (\x,\H+0.6);}
+  \node[anchor=south west,text=umber!70,font=\ttfamily\scriptsize] at (1.2,\H+0.75)
+    {`P' 0x50 \textbullet\ 115200 8N1};
+
+  % Author, date, and the FujiNet mark.
+  \fill[umber] (1.6,3.55) rectangle (20.0,3.6);
+  \node[anchor=north west,text=umber,font=\futurabold\Large] at (1.6,3.2) {Andrew Diller};
+  \node[anchor=north west,text=umber!80,font=\futuramed\large] at (1.6,2.35) {October 2026};
+  \node[anchor=north east,inner sep=0] at (20.0,3.05)
+    {\includegraphics[height=1.15cm]{art/fujinet-logo.pdf}};
+  \node[anchor=north east,text=umber!80,font=\futuramed\small] at (20.0,1.75) {fujinet.online};
   \end{scope}
-
-  % Serial cable to a FujiNet.
-  \draw[black!80,line width=4pt,rounded corners=30pt]
-    ($(current page.south west)+(11.6,5.6)$) -- ($(current page.south west)+(13.4,4.4)$)
-    -- ($(current page.south west)+(15.5,5.2)$);
-  \begin{scope}[shift={($(current page.south west)+(17.4,5.6)$)}]
-    \shade[top color=fujired!90!white,bottom color=fujired!70!black,rounded corners=6pt]
-      (-2.0,-1.0) rectangle (2.0,1.0);
-    \node[text=white,font=\heavyfont\large] at (0,0.25) {FujiNet};
-    \node[text=white!90!fujired,font=\sffamily\scriptsize] at (0,-0.35) {FN-RS232 \textbullet\ NIO \textbullet\ Classic};
-    \fill[black!70,rounded corners=2pt] (-2.35,-0.35) rectangle (-1.95,0.35);
-    \foreach \y in {-0.6,0,0.6}{\fill[green!70!lcd] (1.6,\y) circle (0.06);}
-  \end{scope}
-
-  % Author and date.
-  \node[anchor=south west,text=white,font=\demifont\Large] at ($(current page.south west)+(1.6,1.9)$)
-    {Andrew Diller};
-  \node[anchor=south west,text=white!75!navy,font=\sffamily\large] at ($(current page.south west)+(1.6,1.2)$)
-    {October 2026};
-  \node[anchor=south east,text=white!60!navy,font=\sffamily\small,align=right]
-    at ($(current page.south east)+(-1.4,1.25)$) {fujinet.online};
 \end{tikzpicture}
 \restoregeometry
 \end{titlepage}
