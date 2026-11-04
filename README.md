@@ -5,7 +5,7 @@ to build them.
 
 This branch holds the **FI** apps, rebuilt for
 [FujiNet NIO](https://github.com/markjfisher/fujinet-nio) on `fujinet-nio-lib`
-(its `palm` target). The classic **FN** apps, for fujinet-firmware, are on the
+(its `palmos-serial` target). The classic **FN** apps, for fujinet-firmware, are on the
 `classic` branch.
 
 A Palm sits in its serial HotSync cradle, wired through a null modem to a
@@ -58,9 +58,18 @@ make test     # desktop tests: the FujiBus codec against the firmware's own,
               # FujiPet's life cycle and protocol, and its friend server
 ```
 
-`make` also builds `fujinet-nio-lib` for the apps. It looks for the library in
-`../fujinet-nio-workspace/repos/fujinet-nio-lib`; set `NIO_LIB` to use another
-checkout. `make test` and the harness below expect a `fujinet-firmware`
+`make` also builds `fujinet-nio-lib` for the apps, with its `palmos-serial`
+target. Until [markjfisher/fujinet-nio-lib#7](https://github.com/markjfisher/fujinet-nio-lib/pull/7)
+is merged, that target is on branch `feat/palmos-serial` of
+[dillera/fujinet-nio-lib](https://github.com/dillera/fujinet-nio-lib/tree/feat/palmos-serial):
+
+```sh
+git clone -b feat/palmos-serial https://github.com/dillera/fujinet-nio-lib.git
+make NIO_LIB=$PWD/fujinet-nio-lib
+```
+
+Without `NIO_LIB`, `make` looks for the library in
+`../fujinet-nio-workspace/repos/fujinet-nio-lib`. `make test` and the harness below expect a `fujinet-firmware`
 checkout next to this repository.
 
 To install an app, put its `.prc` in NIO's `hotsync/install/` and HotSync:
