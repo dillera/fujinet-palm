@@ -20,3 +20,8 @@ apps/FujiPet/FujiPet
 fujipet-pets.json
 __pycache__/
 build/
+
+# Palm OS ROMs and the emulator images made from them: Palm's, not ours to
+# publish (assets/README.md says where to get them)
+assets/roms/
+assets/images/

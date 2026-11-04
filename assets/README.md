@@ -1,15 +1,17 @@
 # Test assets
 
-Palm OS ROMs and ready-to-use emulator images for testing the apps in
+What the apps are tested with in
 [CloudpilotEmu](https://github.com/cloudpilot-emu/cloudpilot-emu), with the
 `--serial` bridge that joins the emulated cradle to a FujiNet on the same Mac
-(`tools/rig.sh`).
+(`tools/rig.sh`): Palm OS ROMs in `roms/`, emulator images made from them in
+`images/`, and the CloudpilotEmu patch in `cloudpilot/`.
 
-The ROMs are Palm's and are kept here only for testing; this repository is
-private. The newer ones come from PalmDB's
-[Palm OS Device ROMs](https://palmdb.net/app/palm-roms-complete) collection.
-PalmDB has no Palm VII ROM, so there is no Palm OS 3.2 image: the Palm VIIx
-(3.5) is the nearest.
+The ROMs are Palm's, so neither they nor the images are in this repository:
+git ignores `assets/roms/` and `assets/images/`. Download the ROMs from
+PalmDB's [Palm OS Device ROMs](https://palmdb.net/app/palm-roms-complete)
+collection into `assets/roms/`, under the names in [ROMs](#roms); the hashes
+there are those of the files the apps were tested with. PalmDB has no Palm VII
+ROM, so there is no Palm OS 3.2 image: the Palm VIIx (3.5) is the nearest.
 
 Two of PalmDB's ROMs are not quite what their names say. The one PalmDB calls
 `Palm-III-3.5-en.bin` is Palm OS 3.0 (its version string is "v. 3.0"), so it
@@ -23,6 +25,15 @@ and white. Use `palm-iiic-os4.0.img` for colour.
 Each image has finished Setup (pen calibrated, country and time set) and sits
 at the launcher. Copy one into a run directory and boot the copy, since
 CloudpilotEmu writes to the image it runs.
+
+To make one, boot its ROM, go through Setup, and save the image:
+
+```sh
+tools/rig.sh start runs/mk assets/roms/Palm-V-3.3-en.rom none
+# calibrate the pen, set the country and time, return to the launcher
+tools/rig.sh cmd runs/mk save-image $PWD/assets/images/palm-v-os3.3.img
+tools/rig.sh stop runs/mk
+```
 
 | Image                     | Palm OS | Device as CloudpilotEmu runs it | Screen       |
 |---------------------------|---------|---------------------------------|--------------|
