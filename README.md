@@ -58,13 +58,12 @@ make test     # desktop tests: the FujiBus codec against the firmware's own,
               # FujiPet's life cycle and protocol, and its friend server
 ```
 
-`make` also builds `fujinet-nio-lib` for the apps, with its `palmos-serial`
-target. Until [markjfisher/fujinet-nio-lib#7](https://github.com/markjfisher/fujinet-nio-lib/pull/7)
-is merged, that target is on branch `feat/palmos-serial` of
-[dillera/fujinet-nio-lib](https://github.com/dillera/fujinet-nio-lib/tree/feat/palmos-serial):
+`make` also builds [fujinet-nio-lib](https://github.com/markjfisher/fujinet-nio-lib)
+for the apps, with its `palmos-serial` target (in its `master` since
+2026-11-04):
 
 ```sh
-git clone -b feat/palmos-serial https://github.com/dillera/fujinet-nio-lib.git
+git clone https://github.com/markjfisher/fujinet-nio-lib.git
 make NIO_LIB=$PWD/fujinet-nio-lib
 ```
 
