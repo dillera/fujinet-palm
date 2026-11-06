@@ -23,7 +23,7 @@ ways on the same port:
 
 | App              | Creator | What it does                                                  |
 |------------------|---------|---------------------------------------------------------------|
-| FI Config        | `ANHS`  | keeps a list of TNFS servers, browses them, queues `.prc`/`.pdb`/`.pqa` files into NIO's HotSync install folder, and starts a HotSync |
+| FI Config        | `ANHS`  | keeps a list of TNFS servers, browses them, and installs `.prc`/`.pdb`/`.pqa` files from them straight into the Palm, or queues them in NIO's HotSync install folder and starts a HotSync |
 | FI Test          | `ANTS`  | checks the link to NIO: firmware, board and network, and fetches a web page |
 | FI Bounce        | `ANBW`  | client for a [bounce-world](https://github.com/markjfisher/bounce-world) server (default `bouncy.diller.org:9003`); its Info box counts cradle exchanges, so it doubles as a link stress test |
 | FI Lobby         | `ANLB`  | lists the game servers in the [FujiNet Game Lobby](https://github.com/FujiNetWIFI/fujinet-lobby) (`/viewFull`), with players, platforms and client URLs, and a QA lobby switch in the menu |
@@ -71,8 +71,9 @@ Without `NIO_LIB`, `make` looks for the library in
 `../fujinet-nio-workspace/repos/fujinet-nio-lib`. `make test` and the harness below expect a `fujinet-firmware`
 checkout next to this repository.
 
-To install an app, put its `.prc` in NIO's `hotsync/install/` and HotSync:
-queue it from a TNFS server with FI Config, or from NIO's console with
+To install an app, install it from a TNFS server with FI Config, or put its
+`.prc` in NIO's `hotsync/install/` and HotSync: queue it from a TNFS server
+with FI Config, or from NIO's console with
 `hotsync.fetch http://<host>/<app>.prc` (see NIO's `docs/hotsync.md`).
 
 ## Layout
@@ -100,10 +101,31 @@ queue it from a TNFS server with FI Config, or from NIO's console with
 
 FN HotSync rebuilt for NIO. NIO has no host slots, so the app keeps its own
 list of TNFS servers (fujinet.diller.org and apps.irata.online to start).
-Browse a server, pick a Palm app or database, and FI Config copies it through
-NIO's FileDevice into `hotsync/install/` on NIO's persistent filesystem; the
-next HotSync installs it, from the app's HotSync button or the cradle's. Queue
-lists what is waiting, and Info shows NIO's firmware and network.
+Browse a server, pick a Palm app or database, and choose:
+
+- **Install** streams the file from the server into the Palm's memory with
+  Palm OS's `ExgDBRead`, a chunk at a time through NIO's FileDevice, with no
+  HotSync. A database of the same name already on the Palm is replaced once
+  you agree; one in ROM is left there and the new copy takes its place. If the
+  stream stops short, `ExgDBRead` throws away what it had built. An installed
+  app gets `sysAppLaunchCmdSyncNotify`, as after a HotSync.
+- **Queue** copies it through NIO's FileDevice into `hotsync/install/` on
+  NIO's persistent filesystem; the next HotSync installs it, from the app's
+  HotSync button or the cradle's. Queue lists what is waiting.
+
+Info shows NIO's firmware and network.
+
+Each FileDevice read costs NIO a TNFS open, read and close, about a third of a
+second to fujinet.diller.org, so an install runs at about 600 bytes a second
+on the cradle (256-byte reads) whatever the line speed: a 31 KB app takes
+under a minute.
+
+The same source builds for a Handspring Visor with a
+[Springboard NIO](https://github.com/dillera/springboard-nio) module, on
+`fujinet-nio-lib`'s `palmos-springboard` target, with `FI_NO_HOTSYNC`
+defined: there is no HotSync behind the module, so it only installs, with
+512-byte reads: on a Visor Prism the 31 KB app installs in about 23 seconds.
+springboard-nio's `palm/Makefile` builds it into the module's ROM.
 
 FileDevice has no rename or delete, so a copy that fails part way stays in the
 queue. FI Config writes the file's first entry offset last, so HotSync refuses

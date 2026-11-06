@@ -17,9 +17,10 @@
 
 /* A name with room for the '/' that marks a folder, and its NUL. */
 #define FD_NAME_LEN 64
-/* Largest ReadFile or WriteFile; with its header and URI it fits the
- * library's 512-byte packet. */
-#define FD_CHUNK 256
+/* Largest ReadFile or WriteFile; with its header and a URI of FD_URI_LEN it
+ * fits the library's packet: 256 bytes on the cradle (512-byte packets), 512
+ * on a Springboard module (1024). */
+#define FD_CHUNK (FN_MAX_PACKET_SIZE / 2)
 #define FD_URI_LEN 240
 
 typedef struct {

@@ -1,10 +1,15 @@
 /* FI Config for Palm OS.
  *
- * Keeps a list of TNFS servers, browses their folders, queues Palm apps and
- * databases for the next HotSync by copying them into the HotSync install
- * folder on a FujiNet NIO's persistent filesystem, and starts that HotSync.
- * It talks to the FujiNet NIO on the cradle through fujinet-nio-lib: its
- * FileDevice for the files (filedev.c), FujiDevice and WiFi for Info.
+ * Keeps a list of TNFS servers, browses their folders and installs Palm apps
+ * and databases from them, streaming each file into the Palm's memory with
+ * ExgDBRead. On the cradle it can instead queue a file for the next HotSync,
+ * copying it into the HotSync install folder on FujiNet NIO's persistent
+ * filesystem, and start that HotSync. It talks to FujiNet NIO through
+ * fujinet-nio-lib: its FileDevice for the files (filedev.c), FujiDevice and
+ * WiFi for Info.
+ *
+ * The Springboard build (FI_NO_HOTSYNC) leaves out the queue and HotSync: a
+ * Visor's module has no HotSync behind it.
  */
 #include <PalmOS.h>
 
@@ -56,12 +61,20 @@ static void ShowMessage(const char *line1, const char *line2)
     FrmCustomAlert(MessageAlert, line1, line2 ? line2 : "", "");
 }
 
+#ifdef FI_NO_HOTSYNC
+#define NO_ANSWER "\nNo answer from FujiNet NIO. Is it running?"
+#define NO_LINK "Could not find the FujiNet module."
+#else
+#define NO_ANSWER "\nNo answer from FujiNet. Is the cradle cabled to it?"
+#define NO_LINK "Could not open the cradle port."
+#endif
+
 static void ShowError(const char *what, uint8_t err)
 {
     char detail[64];
 
     if (err == FN_ERR_TIMEOUT)
-        StrCopy(detail, "\nNo answer from FujiNet. Is the cradle cabled to it?");
+        StrCopy(detail, NO_ANSWER);
     else
         StrPrintF(detail, "\nFujiNet: %s.", fn_error_string(err));
     ShowMessage(what, detail);
@@ -189,7 +202,7 @@ static void ClearProgress(void)
     WinEraseRectangle(&rect, 0);
 }
 
-static void ShowProgress(UInt32 done, UInt32 size, UInt16 *shown)
+static void ShowProgress(const char *doing, UInt32 done, UInt32 size, UInt16 *shown)
 {
     char line[48];
     UInt16 percent = size ? (UInt16)(done * 100 / size) : 0;
@@ -197,10 +210,155 @@ static void ShowProgress(UInt32 done, UInt32 size, UInt16 *shown)
     if (percent == *shown)
         return;
     *shown = percent;
-    StrPrintF(line, "Queuing: %lu of %lu bytes", done, size);
+    StrPrintF(line, "%s: %lu of %lu bytes", doing, done, size);
     ClearProgress();
     WinDrawChars(line, StrLen(line), 2, PROGRESS_TOP);
 }
+
+/* ---- Installing on this Palm ---------------------------------------- */
+
+/* One file streaming from the server into ExgDBRead. */
+typedef struct {
+    const char *uri;
+    UInt32 offset;    /* of the next FileDevice read */
+    UInt32 size;
+    UInt16 shown;
+    UInt16 held;      /* bytes in gChunk not yet given to ExgDBRead */
+    UInt16 next;      /* where they start */
+    uint8_t err;      /* FujiNet's error, if a read failed */
+    Boolean eof;
+    Boolean declined; /* the user kept the copy already installed */
+    Boolean self;     /* the file would replace this app while it runs */
+    Boolean inUse;    /* the copy already installed could not be deleted */
+} Install;
+
+/* ExgDBRead's read callback. ExgDBRead asks for a few bytes at a time (a
+ * header, then each 10-byte entry), and every FileDevice read costs NIO a
+ * TNFS open, read and close, so this reads whole chunks into gChunk and hands
+ * them out from there. It fills the buffer and comes back short only at the
+ * end of the file. A reply lost on the way is asked for again at the same
+ * offset (see filedev.c). */
+static Err InstallRead(void *data, UInt32 *size, void *user)
+{
+    Install *in = user;
+    UInt32 want = *size, done = 0;
+    UInt16 take;
+
+    while (done < want) {
+        if (in->held == 0) {
+            if (in->eof)
+                break;
+            in->next = 0;
+            in->err = FdRead(in->uri, in->offset, gChunk, FD_CHUNK, &in->held, &in->eof);
+            if (in->err != FN_OK)
+                break;
+            if (in->held == 0)
+                in->eof = true; /* nothing more to come, whatever the flag said */
+            in->offset += in->held;
+            ShowProgress("Installing", in->offset, in->size, &in->shown);
+            EvtResetAutoOffTimer();
+            continue;
+        }
+        take = want - done < in->held ? (UInt16)(want - done) : in->held;
+        MemMove((UInt8 *)data + done, gChunk + in->next, take);
+        in->next += take;
+        in->held -= take;
+        done += take;
+    }
+    *size = done;
+    return in->err == FN_OK ? errNone : exgErrUnknown;
+}
+
+/* ExgDBRead's callback for a database of the same name already on the Palm:
+ * true once it is out of the way. */
+static Boolean InstallReplace(const char *name, UInt16 version, UInt16 card, LocalID db,
+                              void *user)
+{
+    Install *in = user;
+    UInt16 ourCard;
+    LocalID ours;
+
+    /* One in ROM stays; the copy in RAM takes its place (an odd LocalID is
+     * a RAM handle). */
+    if ((db & 0x01) == 0)
+        return true;
+    if (SysCurAppDatabase(&ourCard, &ours) == errNone && ourCard == card && ours == db) {
+        in->self = true;
+        return false;
+    }
+    if (FrmCustomAlert(ConfirmReplaceAlert, name, "", "") != 0) {
+        in->declined = true;
+        return false;
+    }
+    if (DmDeleteDatabase(card, db) != errNone) {
+        in->inUse = true;
+        return false;
+    }
+    return true;
+}
+
+/* As HotSync does, an app is told it was just installed, so it can set up
+ * its alarms or notifications. */
+static void NotifyInstalled(LocalID db)
+{
+    UInt32 type = 0, result;
+
+    if (DmDatabaseInfo(0, db, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &type,
+                       NULL) == errNone &&
+        type == sysFileTApplication)
+        SysAppLaunch(0, db, 0, sysAppLaunchCmdSyncNotify, NULL, &result);
+}
+
+static void InstallFailed(const char *name, const Install *in, Err err)
+{
+    char code[32];
+
+    if (in->declined)
+        return;
+    if (in->self)
+        ShowMessage("FI Config cannot replace itself while it runs.", NULL);
+    else if (in->inUse)
+        ShowMessage(name, " is already on this Palm and could not be deleted. Is it running?");
+    else if (in->err != FN_OK)
+        ShowError("Could not read that file.", in->err);
+    else if (err == dmErrMemError || err == memErrNotEnoughSpace)
+        ShowMessage("Not enough free memory for ", name);
+    else if (err == dmErrCorruptDatabase || err == exgErrBadData)
+        ShowMessage(name, " is not a Palm app or database.");
+    else {
+        StrPrintF(code, " (Palm OS error 0x%x)", err);
+        ShowMessage("Could not install that file.", code);
+    }
+}
+
+/* Streams a file from the server into the Palm's memory. ExgDBRead builds
+ * the database as the bytes come and deletes it again if they stop short. */
+static void InstallFile(const FdEntry *entry)
+{
+    char uri[FD_URI_LEN + 1];
+    Install in;
+    LocalID db = 0;
+    Boolean reset = false;
+    Err err;
+
+    if (!ServerUri(entry->name, uri))
+        return;
+    MemSet(&in, sizeof(in), 0);
+    in.uri = uri;
+    in.size = entry->size;
+    in.shown = 0xFFFF;
+    err = ExgDBRead(InstallRead, InstallReplace, &in, &db, 0, &reset, true);
+    ClearProgress();
+    if (err != errNone) {
+        InstallFailed(entry->name, &in, err);
+        return;
+    }
+    NotifyInstalled(db);
+    ShowMessage(entry->name, reset ? " is installed. Reset the Palm to finish." : " is installed.");
+}
+
+#ifndef FI_NO_HOTSYNC
+/* ---- Queuing for HotSync -------------------------------------------- */
 
 /* FileDevice can neither rename nor delete, so a copy cut short stays in
  * the queue, and HotSync would install what it holds. Before the first
@@ -237,7 +395,7 @@ static uint8_t CopyToQueue(const char *from, const char *to, UInt32 size)
     if ((err = FdMakeFolder(QUEUE_URI)) != FN_OK)
         return err;
     while (!eof) {
-        ShowProgress(offset, size, &shown);
+        ShowProgress("Queuing", offset, size, &shown);
         EvtResetAutoOffTimer();
         if ((err = FdRead(from, offset, gChunk, FD_CHUNK, &got, &eof)) != FN_OK)
             return err;
@@ -249,7 +407,7 @@ static uint8_t CopyToQueue(const char *from, const char *to, UInt32 size)
             return err;
         offset += got;
     }
-    ShowProgress(offset, size, &shown);
+    ShowProgress("Queuing", offset, size, &shown);
     if (offset != size)
         return FN_ERR_IO; /* the server sent more or less than it listed */
     if (patchAt != 0)
@@ -288,6 +446,7 @@ static void StartHotSync(void)
     }
     SysUIAppSwitch(card, app, sysAppLaunchCmdSyncRequestLocal, NULL);
 }
+#endif /* FI_NO_HOTSYNC */
 
 /* ---- Main form: TNFS servers ----------------------------------------- */
 
@@ -366,18 +525,20 @@ static Boolean MainHandleEvent(EventType *event)
         case MainBrowseButton:
             MainBrowse(form);
             return true;
-        case MainQueueButton:
-            FrmGotoForm(QueueForm);
-            return true;
         case MainInfoButton:
             MainInfo();
             return true;
         case MainEditButton:
             MainEdit(form);
             return true;
+#ifndef FI_NO_HOTSYNC
+        case MainQueueButton:
+            FrmGotoForm(QueueForm);
+            return true;
         case MainHotSyncButton:
             StartHotSync();
             return true;
+#endif
         }
         break;
     default:
@@ -427,17 +588,12 @@ static void BrowseUp(FormType *form)
     BrowseLoad(form);
 }
 
+#ifndef FI_NO_HOTSYNC
 static void BrowseQueue(const FdEntry *entry)
 {
     char from[FD_URI_LEN + 1], to[sizeof(QUEUE_URI) + FD_NAME_LEN];
     uint8_t err;
 
-    if (FrmCustomAlert(ConfirmQueueAlert, entry->name, "", "") != 0)
-        return;
-    if (entry->size < PDB_HEADER_LEN) {
-        ShowMessage(entry->name, " is too short to be a Palm app or database.");
-        return;
-    }
     if (!ServerUri(entry->name, from))
         return;
     QueueUri(entry->name, to);
@@ -447,6 +603,34 @@ static void BrowseQueue(const FdEntry *entry)
         ShowError("Could not queue that file. HotSync will skip what was copied.", err);
     else
         ShowMessage(entry->name, " is queued. Tap HotSync to install it.");
+}
+#endif
+
+/* ConfirmInstallAlert's buttons. */
+#ifdef FI_NO_HOTSYNC
+enum { InstallNow, InstallCancel };
+#else
+enum { InstallNow, InstallQueue, InstallCancel };
+#endif
+
+/* Installs a file now or, on the cradle, queues it for the next HotSync. */
+static void BrowseFile(const FdEntry *entry)
+{
+    UInt16 choice = FrmCustomAlert(ConfirmInstallAlert, entry->name, "", "");
+
+    if (choice == InstallCancel)
+        return;
+    if (entry->size < PDB_HEADER_LEN) {
+        ShowMessage(entry->name, " is too short to be a Palm app or database.");
+        return;
+    }
+#ifndef FI_NO_HOTSYNC
+    if (choice == InstallQueue) {
+        BrowseQueue(entry);
+        return;
+    }
+#endif
+    InstallFile(entry);
 }
 
 static void BrowseOpen(FormType *form)
@@ -464,7 +648,7 @@ static void BrowseOpen(FormType *form)
         StrCat(gPath, name);
         BrowseLoad(form);
     } else if (IsInstallable(name)) {
-        BrowseQueue(&gEntries[item]);
+        BrowseFile(&gEntries[item]);
     } else {
         ShowMessage("Only .prc, .pdb and .pqa files install on a Palm.", NULL);
     }
@@ -556,6 +740,7 @@ static Boolean EditHandleEvent(EventType *event)
     return false;
 }
 
+#ifndef FI_NO_HOTSYNC
 /* ---- Queue form ------------------------------------------------------ */
 
 static void QueueLoad(FormType *form)
@@ -610,6 +795,8 @@ static Boolean QueueHandleEvent(EventType *event)
     return false;
 }
 
+#endif /* FI_NO_HOTSYNC */
+
 /* ---- Application ----------------------------------------------------- */
 
 static Boolean AppHandleEvent(EventType *event)
@@ -627,9 +814,11 @@ static Boolean AppHandleEvent(EventType *event)
     case BrowseForm:
         FrmSetEventHandler(form, BrowseHandleEvent);
         break;
+#ifndef FI_NO_HOTSYNC
     case QueueForm:
         FrmSetEventHandler(form, QueueHandleEvent);
         break;
+#endif
     case EditForm:
         FrmSetEventHandler(form, EditHandleEvent);
         break;
@@ -695,7 +884,7 @@ UInt32 PilotMain(UInt16 cmd, MemPtr cmdPBP, UInt16 launchFlags)
     }
     err = AppStart();
     if (err != FN_OK) {
-        ShowError("Could not open the cradle port.", err);
+        ShowError(NO_LINK, err);
         AppStop();
         return 0;
     }

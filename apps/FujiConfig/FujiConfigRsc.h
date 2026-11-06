@@ -23,5 +23,6 @@
 #define QueueDoneButton     1203
 
 #define MessageAlert        1300
-#define ConfirmQueueAlert   1301
+#define ConfirmInstallAlert 1301
 #define RomIncompatibleAlert 1302
+#define ConfirmReplaceAlert 1303

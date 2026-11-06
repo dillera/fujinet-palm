@@ -1,6 +1,6 @@
 #include "FujiConfigRsc.h"
 
-VERSION ID 1 "0.2"
+VERSION ID 1 "0.3"
 
 ICONFAMILYEX
 BEGIN
@@ -14,11 +14,17 @@ BEGIN
     TITLE "FI Config"
     LABEL "TNFS servers" AUTOID AT (2 16) FONT 1
     LIST "" "" "" "" "" "" "" "" ID MainHostList AT (2 30 156 88) VISIBLEITEMS 8
+#ifdef FI_NO_HOTSYNC
+    BUTTON "Browse" ID MainBrowseButton AT (1 146 36 AUTO)
+    BUTTON "Edit" ID MainEditButton AT (PREVRIGHT+4 PREVTOP 28 AUTO)
+    BUTTON "Info" ID MainInfoButton AT (PREVRIGHT+4 PREVTOP 28 AUTO)
+#else
     BUTTON "Browse" ID MainBrowseButton AT (1 130 36 AUTO)
     BUTTON "Edit" ID MainEditButton AT (PREVRIGHT+3 PREVTOP 28 AUTO)
     BUTTON "Queue" ID MainQueueButton AT (PREVRIGHT+3 PREVTOP 34 AUTO)
     BUTTON "Info" ID MainInfoButton AT (PREVRIGHT+3 PREVTOP 28 AUTO)
     BUTTON "HotSync" ID MainHotSyncButton AT (1 146 48 AUTO)
+#endif
 END
 
 FORM ID EditForm AT (0 0 160 160)
@@ -46,6 +52,7 @@ BEGIN
     BUTTON "Done" ID BrowseDoneButton AT (PREVRIGHT+4 PREVTOP 36 AUTO)
 END
 
+#ifndef FI_NO_HOTSYNC
 FORM ID QueueForm AT (0 0 160 160)
 NOFRAME
 USABLE
@@ -55,6 +62,7 @@ BEGIN
     BUTTON "HotSync Now" ID QueueHotSyncButton AT (1 146 60 AUTO)
     BUTTON "Done" ID QueueDoneButton AT (PREVRIGHT+4 PREVTOP 36 AUTO)
 END
+#endif
 
 ALERT ID MessageAlert
 INFORMATION
@@ -64,12 +72,25 @@ BEGIN
     BUTTONS "OK"
 END
 
-ALERT ID ConfirmQueueAlert
+ALERT ID ConfirmInstallAlert
 CONFIRMATION
 BEGIN
-    TITLE "Queue for HotSync"
-    MESSAGE "Install ^1 on the next HotSync?^2^3"
-    BUTTONS "Queue" "Cancel"
+    TITLE "Install"
+#ifdef FI_NO_HOTSYNC
+    MESSAGE "Install ^1 on this Palm?^2^3"
+    BUTTONS "Install" "Cancel"
+#else
+    MESSAGE "Install ^1 on this Palm now, or queue it for the next HotSync?^2^3"
+    BUTTONS "Install" "Queue" "Cancel"
+#endif
+END
+
+ALERT ID ConfirmReplaceAlert
+CONFIRMATION
+BEGIN
+    TITLE "Replace"
+    MESSAGE "^1 is already on this Palm. Replace it?^2^3"
+    BUTTONS "Replace" "Cancel"
 END
 
 ALERT ID RomIncompatibleAlert
