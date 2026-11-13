@@ -3,6 +3,7 @@
 #define ConnectPortField     1002
 #define ConnectNameField     1003
 #define ConnectButton        1004
+#define ConnectMoreCheckbox  1005
 
 #define WorldForm            1100
 #define WorldFreezeButton    1101

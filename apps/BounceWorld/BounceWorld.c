@@ -7,6 +7,10 @@
  * character as a 4x4 cell. It polls as fast as the line allows, which makes
  * it a stress test of the cradle link; the info box counts the exchanges.
  *
+ * On a double-density screen (Palm OS 5, such as the Clie TG50) the world is
+ * drawn at the screen's own resolution: the same 40x36 characters in 8x8
+ * pixel cells, or with "More world" 80x72 characters in 4x4 cells.
+ *
  * Every request is a line ending in LF; every reply is a 2-byte
  * little-endian total size followed by the payload.
  */
@@ -18,7 +22,7 @@
 
 #define CREATOR APP_CREATOR
 #define PREFS_ID 1
-#define PREFS_VERSION 1
+#define PREFS_VERSION 2
 
 /* Largest READ; with its header it fits the library's 512-byte packet. */
 #define NET_CHUNK 256
@@ -26,11 +30,9 @@
 #define NET_TRIES 3
 #define CLIENT_VERSION "2"
 
-#define COLS 40
-#define ROWS 36
-#define CELL 4
-#define WORLD_W (COLS * CELL)
-#define WORLD_H (ROWS * CELL)
+/* The world area in standard coordinates, on every screen. */
+#define WORLD_W 160
+#define WORLD_H 144
 
 #define HOST_LEN 48
 #define PORT_LEN 6
@@ -67,6 +69,7 @@ typedef struct {
     char host[HOST_LEN];
     char port[PORT_LEN];
     char name[NAME_LEN + 1];
+    UInt8 moreWorld; /* double-density screens: 80x72 characters */
 } BwPrefs;
 
 typedef struct {
@@ -99,6 +102,11 @@ static UInt8 gStep;
 static UInt8 gFailures;
 static Boolean gShowInfo, gShowWho, gShowMessage, gDark;
 static WinHandle gOffscreen;
+/* The client's size in characters, and a character's size in pixels of the
+ * coordinate system the world is drawn in (native on a double-density
+ * screen). */
+static Boolean gHighDensity;
+static UInt8 gCols = 40, gRows = 36, gCell = 4;
 
 static fn_handle_t gHandle = FN_INVALID_HANDLE;
 static UInt32 gReadAt, gWriteAt;
@@ -345,7 +353,7 @@ static Err Register(void)
     char line[LINE_LEN];
     Err err;
 
-    StrPrintF(line, "x-add-client %s,%s,%d,%d", gPrefs.name, CLIENT_VERSION, COLS, ROWS);
+    StrPrintF(line, "x-add-client %s,%s,%d,%d", gPrefs.name, CLIENT_VERSION, gCols, gRows);
     if ((err = Request(line)) != errNone)
         return err;
     if (gReplyLen < 1 || gReply[0] == 0)
@@ -446,6 +454,11 @@ static Err Connect(void)
     uint8_t result;
     Err err;
 
+    if (gHighDensity && gPrefs.moreWorld) {
+        gCols = 80, gRows = 72, gCell = 4;
+    } else {
+        gCols = 40, gRows = 36, gCell = gHighDensity ? 8 : 4;
+    }
     result = fn_init();
     if (result == FN_OK)
         result = fn_tcp_open(&gHandle, gPrefs.host, (uint16_t)StrAToI(gPrefs.port));
@@ -510,28 +523,33 @@ static void FillCell(Coord x, Coord y, Coord w, Coord h)
     WinDrawRectangle(&r, 0);
 }
 
+/* One character in a c x c cell (c is 4 or 8). Lines are c/4 thick, so a
+ * double-density cell keeps the 4x4 cell's shapes with finer edges. */
 static void DrawCell(Coord x, Coord y, char c)
 {
     UInt8 quads = Quadrants(c), arms = Arms(c);
+    Coord n = gCell, h = n / 2, t = n / 4, m = h - 1;
 
     if (c == ' ')
         return;
     if (quads) {
-        if (quads & 1) FillCell(x, y, 2, 2);
-        if (quads & 2) FillCell(x + 2, y, 2, 2);
-        if (quads & 4) FillCell(x, y + 2, 2, 2);
-        if (quads & 8) FillCell(x + 2, y + 2, 2, 2);
+        if (quads & 1) FillCell(x, y, h, h);
+        if (quads & 2) FillCell(x + h, y, h, h);
+        if (quads & 4) FillCell(x, y + h, h, h);
+        if (quads & 8) FillCell(x + h, y + h, h, h);
     } else if (arms) {
-        if (arms & 1) WinDrawLine(x + 1, y, x + 1, y + 1);
-        if (arms & 2) WinDrawLine(x + 1, y + 1, x + 1, y + CELL - 1);
-        if (arms & 4) WinDrawLine(x, y + 1, x + 1, y + 1);
-        if (arms & 8) WinDrawLine(x + 1, y + 1, x + CELL - 1, y + 1);
+        if (arms & 1) FillCell(x + m, y, t, m + t);
+        if (arms & 2) FillCell(x + m, y + m, t, n - m);
+        if (arms & 4) FillCell(x, y + m, m + t, t);
+        if (arms & 8) FillCell(x + m, y + m, n - m, t);
     } else if (c == '/') {
-        WinDrawLine(x, y + CELL - 1, x + CELL - 1, y);
+        WinDrawLine(x, y + n - 1, x + n - 1, y);
+        if (t > 1) WinDrawLine(x + 1, y + n - 1, x + n - 1, y + 1);
     } else if (c == '\\') {
-        WinDrawLine(x, y, x + CELL - 1, y + CELL - 1);
+        WinDrawLine(x, y, x + n - 1, y + n - 1);
+        if (t > 1) WinDrawLine(x + 1, y, x + n - 1, y + n - 2);
     } else {
-        FillCell(x + 1, y + 1, 2, 2);
+        FillCell(x + t, y + t, h, h);
     }
 }
 
@@ -554,12 +572,12 @@ static void DrawShape(UInt8 id, Int8 cx, Int8 cy)
     }
     for (i = 0; i < width; i++) {
         y = top + i;
-        if (y < 0 || y >= ROWS)
+        if (y < 0 || y >= gRows)
             continue;
         for (j = 0; j < width; j++) {
             x = left + j;
-            if (x >= 0 && x < COLS)
-                DrawCell(x * CELL, y * CELL, data[i * width + j]);
+            if (x >= 0 && x < gCols)
+                DrawCell(x * gCell, y * gCell, data[i * width + j]);
         }
     }
 }
@@ -623,23 +641,29 @@ static void DrawMessage(void)
     }
 }
 
-/* Redraws the world from the last poll, off screen when possible. */
+/* Redraws the world from the last poll, off screen when possible. Shapes are
+ * drawn in native coordinates on a double-density screen; the boxes and
+ * text use standard ones, and the system draws them with its fine fonts. */
 static void DrawWorld(void)
 {
     RectangleType r;
     WinHandle old = NULL;
     FontID font;
-    UInt16 count, i, at;
+    UInt16 count, i, at, coords = 0;
 
     RctSetRectangle(&r, 0, 0, WORLD_W, WORLD_H);
     if (gOffscreen)
         old = WinSetDrawWindow(gOffscreen);
     WinEraseRectangle(&r, 0);
+    if (gHighDensity)
+        coords = WinSetCoordinateSystem(kCoordinatesNative);
     count = gViewLen >= 3 ? gView[2] : 0;
     if (count > (gViewLen - 3) / 3)
         count = (gViewLen - 3) / 3;
     for (i = 0, at = 3; i < count; i++, at += 3)
         DrawShape(gView[at], (Int8)gView[at + 1], (Int8)gView[at + 2]);
+    if (gHighDensity)
+        WinSetCoordinateSystem(coords);
     font = FntSetFont(stdFont);
     if (gShowInfo)
         DrawInfo();
@@ -852,6 +876,7 @@ static void SetDefaults(void)
     StrCopy(gPrefs.host, "bouncy.diller.org");
     StrCopy(gPrefs.port, "9003");
     StrCopy(gPrefs.name, "palm");
+    gPrefs.moreWorld = 0;
 }
 
 static void LoadPrefs(void)
@@ -869,14 +894,23 @@ static void SavePrefs(FormType *form)
     GetFieldText(form, ConnectHostField, gPrefs.host, HOST_LEN, "bouncy.diller.org");
     GetFieldText(form, ConnectPortField, gPrefs.port, PORT_LEN, "9003");
     GetFieldText(form, ConnectNameField, gPrefs.name, NAME_LEN + 1, "palm");
+    if (gHighDensity)
+        gPrefs.moreWorld = (UInt8)FrmGetControlValue(form,
+                                                     FrmGetObjectIndex(form, ConnectMoreCheckbox));
     PrefSetAppPreferences(CREATOR, PREFS_ID, PREFS_VERSION, &gPrefs, sizeof(gPrefs), true);
 }
 
 static void ConnectShow(FormType *form)
 {
+    UInt16 more = FrmGetObjectIndex(form, ConnectMoreCheckbox);
+
     SetFieldText(form, ConnectHostField, gPrefs.host);
     SetFieldText(form, ConnectPortField, gPrefs.port);
     SetFieldText(form, ConnectNameField, gPrefs.name);
+    if (gHighDensity)
+        FrmSetControlValue(form, more, gPrefs.moreWorld);
+    else
+        FrmHideObject(form, more);
     FrmDrawForm(form);
     FrmSetFocus(form, FrmGetObjectIndex(form, ConnectHostField));
 }
@@ -990,12 +1024,27 @@ static Boolean RomCompatible(void)
     return rom >= sysMakeROMVersion(3, 1, 0, sysROMStageRelease, 0);
 }
 
+/* A double-density screen with the Palm OS 5 calls to draw on it. */
+static Boolean HighDensityScreen(void)
+{
+    UInt32 version = 0, density = 0;
+
+    if (FtrGet(sysFtrCreator, sysFtrNumWinVersion, &version) != errNone || version < 4)
+        return false;
+    return WinScreenGetAttribute(winScreenDensity, &density) == errNone &&
+           density == kDensityDouble;
+}
+
 static Err AppStart(void)
 {
     Err err;
 
     LoadPrefs();
-    gOffscreen = WinCreateOffscreenWindow(WORLD_W, WORLD_H, screenFormat, &err);
+    gHighDensity = HighDensityScreen();
+    /* The size is in standard coordinates; nativeFormat gives the window
+     * the screen's density. */
+    gOffscreen = WinCreateOffscreenWindow(WORLD_W, WORLD_H,
+                                          gHighDensity ? nativeFormat : screenFormat, &err);
     return errNone;
 }
 

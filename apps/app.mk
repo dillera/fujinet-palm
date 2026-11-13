@@ -3,10 +3,13 @@
 # of its own .c files. An app that sets NIO talks to FujiNet NIO through
 # fujinet-nio-lib (NIO_LIB, built for its palmos-serial target) instead of the classic
 # client in common/.
+# PALMOS picks the SDK headers; an app that calls Palm OS 5 functions (behind
+# a feature check) sets it to -palmos5r3 and still runs on older releases.
 # Run inside the palmdev image (see the top-level Makefile).
 COMMON  = ../../common
 CC      = m68k-palmos-gcc
-CFLAGS  = -O2 -Wall -palmos3.5 -I$(COMMON) -I. '-DAPP_CREATOR_STR="$(CREATOR)"'
+PALMOS ?= -palmos3.5
+CFLAGS  = -O2 -Wall $(PALMOS) -I$(COMMON) -I. '-DAPP_CREATOR_STR="$(CREATOR)"'
 ifdef NIO
 NIO_LIB ?= ../../../fujinet-nio-workspace/repos/fujinet-nio-lib
 # FN_MAX_PACKET_SIZE matches the library's palmos-serial target.

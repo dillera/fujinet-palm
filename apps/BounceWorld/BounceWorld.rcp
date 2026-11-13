@@ -1,6 +1,6 @@
 #include "BounceWorldRsc.h"
 
-VERSION ID 1 "0.2"
+VERSION ID 1 "0.3"
 
 ICONFAMILYEX
 BEGIN
@@ -18,6 +18,7 @@ BEGIN
     FIELD ID ConnectPortField AT (42 36 34 12) UNDERLINED SINGLELINE NUMERIC MAXCHARS 5
     LABEL "Name:" AUTOID AT (4 52)
     FIELD ID ConnectNameField AT (42 52 50 12) UNDERLINED SINGLELINE MAXCHARS 8
+    CHECKBOX "More world" ID ConnectMoreCheckbox AT (96 51 AUTO AUTO)
     LABEL "The server's framed TCP port," AUTOID AT (4 72) FONT 0
     LABEL "9003 on bounce-world 2.3+." AUTOID AT (4 83) FONT 0
     LABEL "Keys: F freeze  R reset  + - speed" AUTOID AT (4 100) FONT 0
