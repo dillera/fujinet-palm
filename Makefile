@@ -68,13 +68,16 @@ install-visor: $(PRCS)
 # make way. flash-visor builds the module firmware with that ROM, flashes it
 # and restarts NIO (springboard-nio's host/flash.sh); then reset the Visor.
 #
-# The ROM now holds FI H2H NL and NioLib (as an inert NLrm database, which FI
-# H2H NL's Options > Install NioLib copies into RAM as the real libr/NiL1):
-# with SB NIO that fills it (60 of 64 KB). FI H2H SB's static build already
-# has a copy in RAM (FI H2H RAM); SB_ROM_APPS=... picks another set.
+# The ROM holds SB NIO, FI H2H SB and FI H2H NL (57 of 64 KB); each copies
+# itself to RAM with Options > Copy to RAM. FI H2H NL needs NioLib in RAM:
+# for a Visor without it, put NioLib in the ROM instead of FI H2H SB (as an
+# inert NLrm database, which FI H2H NL's Options > Install NioLib copies into
+# RAM as the real libr/NiL1):
+#   make flash-visor SB_ROM_APPS="$(SBNIO)/palm/build/sbnio.prc \
+#     $(abspath palm/build/FI_H2H_NL.prc) $(abspath build/NioLib-rom.prc)"
 SBNIO ?= $(abspath ../../springboard-nio)
-SB_ROM_APPS ?= $(SBNIO)/palm/build/sbnio.prc $(abspath palm/build/FI_H2H_NL.prc) \
-               $(abspath build/NioLib-rom.prc)
+SB_ROM_APPS ?= $(SBNIO)/palm/build/sbnio.prc $(abspath palm/build/FI_H2H_SB.prc) \
+               $(abspath palm/build/FI_H2H_NL.prc)
 
 build/NioLib-rom.prc: $(NIOLIB)/NioLib.prc tools/retype_prc.py
 	@mkdir -p build

@@ -66,10 +66,10 @@ download; **64K** and **Sweep** add the long tests.
 
 - **Visor + Springboard**: as in `~/code/springboard-nio`: module flashed,
   `host/nio.sh start` (NIO on this Mac on the module's USB port).
-  `make flash-visor` puts FI H2H SB in the module ROM ("SBNIO 0.4 H2H": SB NIO,
-  FI H2H SB, NIO Net, FI Config; ISS Tracker and Weather make way, the ROM
-  holds 64 KB), builds the module firmware with it, flashes the module and
-  restarts NIO; then reset the Visor. Set NIO's packet link to 8192 bytes,
+  `make flash-visor` puts FI H2H SB and FI H2H NL in the module ROM ("SBNIO
+  0.4 H2H": SB NIO and the two apps, 57 of its 64 KB; NIO Net, FI Config,
+  ISS Tracker and Weather make way), builds the module firmware with it,
+  flashes the module and restarts NIO; then reset the Visor. Set NIO's packet link to 8192 bytes,
   as the module allows (`channel: packet_link: capacity: 8192` in
   `host/nio-run/fujinet-data/fujinet.yaml`; the default, 4096, drops any
   reply over 4 KB, so the sweep's top sizes would time out).
@@ -104,8 +104,9 @@ h2h server).
 ### FI H2H NL and NioLib
 
 `make` also builds NioLib for Palm OS 3.5 (`make niolib`: the palmdev-py image,
-without the USB transport, which needs the Handspring SDK). `make flash-visor`
-puts FI H2H NL and NioLib in the module ROM with SB NIO (60 of 64 KB). NioLib
+without the USB transport, which needs the Handspring SDK). FI H2H NL needs
+NioLib in the Visor's RAM. For a Visor without it, flash a ROM with NioLib in
+place of FI H2H SB (`SB_ROM_APPS`, see the Makefile; 60 of 64 KB). NioLib
 travels there as `NioLib (ROM copy)`, type `NLrm`, so Palm OS never loads it
 from the module; on the Visor, FI H2H NL's **Options > Install NioLib** copies
 it into RAM as the real `NioLib` (`libr`/`NiL1`), which is where NioLib's guide
