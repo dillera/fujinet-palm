@@ -28,7 +28,10 @@ def main(argv):
         raise SystemExit(f"{template}: no value for {', '.join(sorted(set(left)))}")
     tmp = out + ".tmp"
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("README.txt", text.replace("\n", "\r\n"))
+        info = zipfile.ZipInfo("README.txt", datetime.datetime.now().timetuple()[:6])
+        info.external_attr = 0o644 << 16
+        info.compress_type = zipfile.ZIP_DEFLATED
+        z.writestr(info, text.replace("\n", "\r\n"))
         for f in files:
             z.write(f, os.path.basename(f))
     os.replace(tmp, out)

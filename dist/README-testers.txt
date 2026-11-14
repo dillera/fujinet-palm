@@ -62,10 +62,11 @@ SPRINGBOARD NOTES
           capacity: 8192
   The default, 4096, drops any reply over 4 KB, so the sweep's largest sizes
   would time out.
-- FI H2H NL calls NioLib, which must be installed in RAM. NioLib.prc here is
-  built from fujinet-nio-lib @NIOLIB@, which includes a fix
-  for misread Springboard registers (without it, runs show the odd I/O
-  error). It has no USB transport: if you rely on NioLib's USB transport,
+- FI H2H NL calls NioLib, which must be installed in RAM. NioLib.prc here
+  includes a fix for misread Springboard registers (without it, runs show
+  the odd I/O error), from fujinet-nio-lib
+      @NIOLIB@
+  It has no USB transport: if you rely on NioLib's USB transport,
   keep your own NioLib and skip this one. NioLib uses its Springboard
   transport unless NIO Config saved another; FI H2H NL's results are
   labelled as Springboard runs either way.
