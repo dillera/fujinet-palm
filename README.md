@@ -55,7 +55,11 @@ LAN target and start with this one.
 
 On each Palm: **Run** (or **Ping** for the link test alone), wait, read the
 report, then **Send** to put the run on the server (and **Memo** for a copy in
-Memo Pad). A tap during a run stops it. **Reps** (default 3) repeats each
+Memo Pad). **Name** is the tester's name (it starts as the Palm's HotSync
+user name); Send needs one. Every upload carries it (`w=`), and the server
+keeps each tester's runs apart: a run's key is `name/stack:id`. The report
+shows each tester's latest run of each stack (`?who=a,b` keeps those
+testers), and the server's front page lists every run by tester. A tap during a run stops it. **Reps** (default 3) repeats each
 download; **64K** and **Sweep** add the long tests.
 
 ### The three rigs

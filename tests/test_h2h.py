@@ -77,6 +77,40 @@ class PatternAndStore(unittest.TestCase):
             self.assertIn("not split: the exchanges run inside the library", page)
 
 
+class Testers(unittest.TestCase):
+    def test_runs_are_kept_per_tester(self):
+        # Two testers whose Palms drew the same run id on the same stack keep
+        # two runs; a run with no name keeps the old key.
+        with tempfile.TemporaryDirectory() as d:
+            store = h2h_server.Store(d)
+            for who, ms in (("Alice", 100000), ("bob, jr", 200000), ("", 300000)):
+                q = {"s": "nio-serial", "id": "7", "w": who}
+                store.header(dict(q, fw="1.0"), "1.2.3.4")
+                store.row(dict(q, t="get1k", o="0", v=f"3,0,490,1024,{ms}"), "1.2.3.4")
+            runs = h2h_server.Store(d).runs
+            self.assertEqual(sorted(runs), ["Alice/nio-serial:7", "bob jr/nio-serial:7", "nio-serial:7"])
+            self.assertEqual(runs["Alice/nio-serial:7"]["rows"]["get1k"]["us_total"], 100000)
+            self.assertEqual(runs["bob jr/nio-serial:7"]["who"], "bob jr")
+            self.assertEqual(len(h2h_server.pick_runs(runs, "")), 3)
+            (alice,) = h2h_server.pick_runs(runs, "", "alice")
+            self.assertEqual(alice["who"], "Alice")
+            self.assertEqual(len(h2h_server.pick_runs(runs, "", "Alice,BOB JR")), 2)
+            self.assertEqual(h2h_server.label(alice), "NIO, cradle serial \u00b7 Alice")
+            text = h2h_server.text_report(h2h_server.pick_runs(runs, ""), [])
+            self.assertIn("tester", text)
+            self.assertIn("bob jr", text)
+            self.assertIn("NIO, cradle serial \u00b7 Alice", h2h_server.html_report([alice], []))
+            page = h2h_server.index_page("v", runs)
+            self.assertIn("/h2h/report?who=bob%20jr", page)
+            self.assertIn("/h2h/report?runs=Alice/nio-serial%3A7", page)
+
+    def test_tester_names_are_cleaned(self):
+        self.assertEqual(h2h_server.tester({"w": "  Ann \t\n Lee  "}), "Ann Lee")
+        self.assertEqual(h2h_server.tester({"w": "a,b"}), "a b")
+        self.assertEqual(h2h_server.tester({"w": "x" * 60}), "x" * 40)
+        self.assertEqual(h2h_server.tester({}), "")
+
+
 class Version(unittest.TestCase):
     def test_version_is_shown_everywhere(self):
         # The header, /h2h/version, the index page and both reports all name
@@ -134,6 +168,9 @@ class EndToEnd(unittest.TestCase):
         with open(os.path.join(self.data, "runs.json")) as f:
             runs = json.load(f)
         run = next(r for r in runs.values() if r["stack"] == "host")
+        # The host harness's tester name (with a space, URL-encoded on the way).
+        self.assertEqual(run["who"], "Host Tester")
+        self.assertEqual(run["key"], f"Host Tester/host:{run['id']}")
         sizes = {"get16": 16, "get1k": 1024, "get4k": 4096, "get16k": 16384, "get64k": 65536}
         for test, size in sizes.items():
             row = run["rows"][test]

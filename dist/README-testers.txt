@@ -28,13 +28,17 @@ RUNNING A TEST
 --------------
 1. Open the app. Target should read http://fujinet.online:8199/h2h. Your
    FujiNet makes the connection, so it needs to reach the internet.
+   Name starts as your Palm's HotSync name: change it to the name you want
+   your runs under, and use the same one in every app. Send needs a name.
 2. Leave Reps at 3, and 64K and Sweep ticked, for a full run. Tap Run.
    A full run takes several minutes; tap the screen to stop it early.
    Ping runs only the link test, with no internet involved.
 3. When it finishes, the results appear. Tap Send to upload them to the
    server, and Memo to save a copy in Memo Pad. Done goes back, and Results
    shows them again.
-4. Look for your run on the report page above.
+4. Look for your run on the report page above. The server's front page,
+   http://fujinet.online:8199/h2h/, lists every run by tester; your name
+   there shows your latest run of each app side by side.
 
 The results last only while the app stays open: Send (or Memo) before you
 switch apps. If Send fails, tap it again.

@@ -6,6 +6,7 @@
 #define MainRunButton       1005
 #define MainPingButton      1006
 #define MainResultsButton   1007
+#define MainNameField       1008
 
 #define ResultsForm         1100
 #define ResultsField        1101

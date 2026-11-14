@@ -2,6 +2,7 @@
  * results form with the report, which can be sent to the h2h server (where
  * the runs of every stack are compared) or saved to Memo Pad. */
 #include <PalmOS.h>
+#include <DLServer.h>  /* DlkGetSyncInfo: the HotSync user name */
 
 #include "h2h.h"
 #include "h2h_rsc.h"
@@ -25,15 +26,17 @@
 #define H2H_RAM_CREATOR_STR APP_CREATOR_STR
 #endif
 #define PREFS_ID 0
-/* 2: the default target moved to fujinet.online, so settings saved by
- * earlier builds (pointing at a Mac on the LAN) start afresh. */
+/* 2: the default target moved to fujinet.online, and the tester's name
+ * came in, so settings saved by earlier builds (pointing at a Mac on the
+ * LAN) start afresh. */
 #define PREFS_VERSION 2
 #define REPORT_SIZE 6000
 #define MEMO_MAX 4000
 
-#define LOG_LINES 5
+/* The progress lines, between the Name field (y 82-93) and the buttons (y 147). */
+#define LOG_LINES 4
 #define LOG_CHARS 40
-#define LOG_TOP 80
+#define LOG_TOP 96
 #define LOG_HEIGHT 12
 
 static Settings gSettings;
@@ -111,6 +114,19 @@ Boolean ui_stop_requested(void)
 
 /* ---------------------------------------------------------------- settings */
 
+/* The name a tester starts with: the Palm's HotSync user name, if it has one. */
+static void DefaultName(Char *name, UInt16 size)
+{
+    Char user[dlkUserNameBufSize];
+
+    name[0] = '\0';
+    user[0] = '\0';
+    if (DlkGetSyncInfo(NULL, NULL, NULL, user, NULL, NULL) == errNone && user[0]) {
+        StrNCopy(name, user, size - 1);
+        name[size - 1] = '\0';
+    }
+}
+
 static void LoadSettings(void)
 {
     UInt16 size = sizeof(gSettings);
@@ -123,6 +139,8 @@ static void LoadSettings(void)
         gSettings.big = true;
         gSettings.sweep = true;
     }
+    if (!gSettings.name[0])
+        DefaultName(gSettings.name, sizeof(gSettings.name));
 }
 
 static void SaveSettings(void)
@@ -160,12 +178,14 @@ static void ShowSettings(FormType *frm)
     SetFieldText(Ptr(frm, MainRepsField), reps);
     CtlSetValue(Ptr(frm, MainBigCheck), gSettings.big);
     CtlSetValue(Ptr(frm, MainSweepCheck), gSettings.sweep);
+    SetFieldText(Ptr(frm, MainNameField), gSettings.name);
 }
 
 static void ReadSettings(FormType *frm)
 {
     const Char *t = FldGetTextPtr(Ptr(frm, MainTargetField));
     const Char *r = FldGetTextPtr(Ptr(frm, MainRepsField));
+    const Char *w = FldGetTextPtr(Ptr(frm, MainNameField));
     UInt16 n, i, j = 0;
 
     if (t) {
@@ -181,6 +201,14 @@ static void ReadSettings(FormType *frm)
     gSettings.reps = n < 1 ? 1 : (n > 20 ? 20 : n);
     gSettings.big = CtlGetValue(Ptr(frm, MainBigCheck));
     gSettings.sweep = CtlGetValue(Ptr(frm, MainSweepCheck));
+    /* The name without spaces at either end. */
+    for (i = 0; w && w[i] == ' '; i++)
+        ;
+    for (j = 0; w && w[i] && j < sizeof(gSettings.name) - 1; i++)
+        gSettings.name[j++] = w[i];
+    while (j > 0 && gSettings.name[j - 1] == ' ')
+        j--;
+    gSettings.name[j] = '\0';
     SaveSettings();
 }
 
@@ -254,8 +282,14 @@ static void SendResults(void)
 {
     Char line[48];
     UInt16 sent = 0;
-    Err err = suite_upload(&gSettings, &sent);
+    Err err;
 
+    if (!gSettings.name[0]) {
+        FrmCustomAlert(InfoAlert, "Put your name in Name on the main screen first, ",
+                       "so your results stay apart from other testers'.", "");
+        return;
+    }
+    err = suite_upload(&gSettings, &sent);
     if (err == errNone)
         StrPrintF(line, "Sent %u requests to the h2h server.", sent);
     else
@@ -271,6 +305,9 @@ static Boolean ResultsHandleEvent(EventType *e)
     switch (e->eType) {
     case frmOpenEvent:
         fld = Ptr(frm, ResultsField);
+        /* Afresh each time, so a name typed after the run is in it (and in Memo). */
+        if (gHaveResults)
+            BuildReport();
         if (gReport)
             FldSetTextHandle(fld, gReport);
         FrmDrawForm(frm);
@@ -455,8 +492,8 @@ static Boolean MainHandleEvent(EventType *e)
         gLogVisible = true;
         DrawHeader();
         if (gLogCount == 0) {
-            ui_progress("Start h2h_server.py on the Mac,");
-            ui_progress("check the target, then Run.");
+            ui_progress("Check the target and your name,");
+            ui_progress("then tap Run.");
             ui_progress(gHaveResults ? "Results: the last run." : "");
         } else {
             DrawLog();

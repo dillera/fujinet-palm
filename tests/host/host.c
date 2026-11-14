@@ -253,6 +253,7 @@ int main(int argc, char **argv)
     s.reps = argc > 2 && argv[2][0] != '-' ? (UInt16)atoi(argv[2]) : 2;
     s.big = true;
     s.sweep = true;
+    snprintf(s.name, sizeof(s.name), "%s", getenv("H2H_WHO") ? getenv("H2H_WHO") : "Host Tester");
     suite_run(&s, false);
     suite_report(report, sizeof(report));
     fputs(report, stdout);

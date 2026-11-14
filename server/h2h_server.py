@@ -20,7 +20,10 @@ Under /h2h:
   /h?...        a run's header, sent by the app's Send button
   /r?...        one row of a run's results (o = index of the first value in v)
   /n?...        one diagnostic note of a run (i = its number, m = the text)
-  /report       every stack's latest run side by side (HTML); ?runs=a,b picks runs
+                All three carry s (stack), id (the run) and w (the tester's
+                name): a run is the tester's, the stack's and the id's.
+  /report       each tester's latest run of each stack side by side (HTML);
+                ?who=a,b keeps those testers, ?runs=k1,k2 picks runs by key
   /report.txt   the same as text
   /runs.json    everything stored
   /log.csv      every request served: when, who, what, and how long it took here
@@ -40,7 +43,7 @@ import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 
 MAX_BYTES = 4 * 1024 * 1024
 
@@ -72,7 +75,8 @@ def server_version(override=""):
 
 def stamp(out, version):
     """Write a copy of this file whose VERSION is version."""
-    src = open(os.path.abspath(__file__)).read()
+    with open(os.path.abspath(__file__)) as f:
+        src = f.read()
     old = 'VERSION = ""\n'
     if old not in src:
         raise SystemExit("this copy is already stamped")
@@ -128,19 +132,20 @@ class Store:
             json.dump(self.runs, f, indent=1, sort_keys=True)
         os.replace(tmp, self.runs_path)
 
-    def _run(self, stack, run_id, client):
-        key = f"{stack}:{run_id}"
+    def _run(self, q, client):
+        stack, run_id, who = q["s"], q["id"], tester(q)
+        key = f"{who}/{stack}:{run_id}" if who else f"{stack}:{run_id}"
         run = self.runs.get(key)
         if run is None:
             run = self.runs[key] = {
-                "key": key, "stack": stack, "id": run_id, "client": client,
+                "key": key, "stack": stack, "id": run_id, "who": who, "client": client,
                 "received": now_iso(), "meta": {}, "rows": {}, "order": [],
             }
         return run
 
     def header(self, q, client):
         with self.lock:
-            run = self._run(q["s"], q["id"], client)
+            run = self._run(q, client)
             for f in HEADER_FIELDS:
                 if f in q:
                     run["meta"][f] = q[f]
@@ -151,7 +156,7 @@ class Store:
         values = [int(v) for v in q.get("v", "").split(",") if v != ""]
         offset = int(q.get("o", "0"))
         with self.lock:
-            run = self._run(q["s"], q["id"], client)
+            run = self._run(q, client)
             row = run["rows"].setdefault(q["t"], {})
             if q["t"] not in run["order"]:
                 run["order"].append(q["t"])
@@ -162,7 +167,7 @@ class Store:
 
     def note(self, q, client):
         with self.lock:
-            run = self._run(q["s"], q["id"], client)
+            run = self._run(q, client)
             notes = run.setdefault("notes", {})
             notes[str(int(q.get("i", len(notes))))] = q.get("m", "")[:200]
             if "of" in q:
@@ -185,6 +190,13 @@ LOG_COLUMNS = ["time", "client", "path", "stack", "run", "test", "rep", "bytes",
 
 def now_iso():
     return datetime.datetime.now().isoformat(timespec="seconds")
+
+
+def tester(q):
+    """The tester's name from w: printable, spaces collapsed, no commas (they
+    separate names in ?who=), at most 40 characters."""
+    name = "".join(c for c in q.get("w", "") if c.isprintable()).replace(",", " ")
+    return " ".join(name.split())[:40]
 
 
 def query(url):
@@ -260,14 +272,15 @@ class Handler(BaseHTTPRequestHandler):
                 data = open(self.store.log_path, "rb").read() if os.path.exists(self.store.log_path) else b""
                 return self._send(200, data, "text/csv; charset=utf-8")
             if path in ("/report", "/report.txt"):
-                runs = pick_runs(self.store.runs, q.get("runs", ""))
+                runs = pick_runs(self.store.runs, q.get("runs", ""), q.get("who", ""))
                 log = read_log(self.store.log_path)
                 if path == "/report":
                     return self._send(200, html_report(runs, log, self.version).encode(),
                                       "text/html; charset=utf-8")
                 return self._send(200, text_report(runs, log, self.version).encode())
             if path == "":
-                return self._send(200, index_page(self.version).encode(), "text/html; charset=utf-8")
+                return self._send(200, index_page(self.version, self.store.runs).encode(),
+                                  "text/html; charset=utf-8")
         except (KeyError, ValueError) as e:
             return self._send(400, f"bad request: {e}\n".encode())
         return self._send(404, b"not found\n")
@@ -275,17 +288,24 @@ class Handler(BaseHTTPRequestHandler):
 
 # ---------------------------------------------------------------- reporting
 
-def pick_runs(runs, wanted):
-    """The runs named in wanted (keys or ids), else the latest run of each stack."""
+def pick_runs(runs, wanted, who=""):
+    """The runs named in wanted (keys or ids), else each tester's latest run of
+    each stack; who (names, comma-separated, any case) keeps those testers'."""
+    runs = runs.values() if isinstance(runs, dict) else runs
+    if who:
+        names = {w.strip().lower() for w in who.split(",") if w.strip()}
+        runs = [r for r in runs if r.get("who", "").lower() in names]
     if wanted:
         names = [w for w in wanted.split(",") if w]
-        return [r for r in runs.values() if r["key"] in names or r["id"] in names]
+        return [r for r in runs if r["key"] in names or r["id"] in names]
     latest = {}
-    for r in runs.values():
-        if r["stack"] not in latest or r["received"] > latest[r["stack"]]["received"]:
-            latest[r["stack"]] = r
+    for r in runs:
+        k = (r.get("who", ""), r["stack"])
+        if k not in latest or r["received"] > latest[k]["received"]:
+            latest[k] = r
     order = list(STACKS)
-    return sorted(latest.values(), key=lambda r: order.index(r["stack"]) if r["stack"] in order else 99)
+    return sorted(latest.values(), key=lambda r: (order.index(r["stack"]) if r["stack"] in order else 99,
+                                                  r.get("who", "").lower()))
 
 
 def read_log(path):
@@ -331,8 +351,14 @@ def clock_res(run):
     return f"{ns} ns" if ns < 1000 else f"{ns / 1000:.1f} us" if ns < 1000000 else f"{ns / 1000000:.0f} ms"
 
 
-def label(run):
+def stack_label(run):
     return STACKS.get(run["stack"], run["stack"])
+
+
+def label(run):
+    """The stack, and the tester when the run has one."""
+    who = run.get("who", "")
+    return stack_label(run) + (f" \u00b7 {who}" if who else "")
 
 
 def gets(run):
@@ -380,10 +406,12 @@ def text_report(runs, log, version=""):
         return "No runs yet: run a test on a Palm, then tap Send.\n" + tail
     w = 18
     lines = []
-    head = "".ljust(w) + "".join(label(r)[:24].ljust(26) for r in runs)
-    lines += ["Head-to-head: " + ", ".join(f"{r['stack']} run {r['id']}" for r in runs), ""]
+    head = "".ljust(w) + "".join(stack_label(r)[:24].ljust(26) for r in runs)
+    lines += ["Head-to-head: " + ", ".join(f"{r['stack']} run {r['id']}" + (f" ({r['who']})" if r.get("who") else "")
+                                           for r in runs), ""]
     lines.append("RUNS")
     for name, get in (
+        ("tester", lambda r: r.get("who") or "-"),
         ("device", lambda r: r["meta"].get("dev", "?")),
         ("firmware", lambda r: r["meta"].get("fw", "?")),
         ("clock res", lambda r: clock_res(r)),
@@ -499,29 +527,34 @@ th:first-child,td:first-child{text-align:left}thead th{color:var(--muted);font-w
 PART_COLORS = {"link send": "var(--s1)", "device wait": "var(--s2)", "link recv": "var(--s3)", "palm": "var(--s4)"}
 
 
+def table(head, rows):
+    """An HTML table: head is text, rows hold HTML already escaped."""
+    s = ["<div class=wrap><table><thead><tr>"] + [f"<th>{html.escape(h)}</th>" for h in head]
+    s.append("</tr></thead><tbody>")
+    for r in rows:
+        s.append("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>")
+    s.append("</tbody></table></div>")
+    return "".join(s)
+
+
 def html_report(runs, log, version=""):
     e = html.escape
     out = [f"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width'>"
            f"<title>H2H report</title><style>{CSS}</style></head><body><main>",
            "<h1>FujiNet on the Palm: head to head</h1>",
-           f"<p class=note>{len(runs)} runs, the latest of each stack unless ?runs= names them. "
+           f"<p class=note>{len(runs)} runs: each tester's latest of each stack, unless ?who= or ?runs= "
+           "narrows them. "
            "Times are the Palm's own, averaged over the repetitions that succeeded. "
            f"h2h server <code>{e(version or server_version())}</code>.</p>"]
     if not runs:
         out.append("<p>No runs yet: run a test on a Palm, then tap Send.</p></main></body></html>")
         return "".join(out)
 
-    def table(head, rows):
-        s = ["<div class=wrap><table><thead><tr>"] + [f"<th>{e(h)}</th>" for h in head] + ["</tr></thead><tbody>"]
-        for r in rows:
-            s.append("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>")
-        s.append("</tbody></table></div>")
-        return "".join(s)
-
     head = [""] + [label(r) for r in runs]
     out.append("<h2>The runs</h2>")
     meta_rows = []
     for name, get in (
+        ("Tester", lambda r: r.get("who") or "-"),
         ("Run", lambda r: f"{r['id']} ({r['received']})"),
         ("Device", lambda r: r["meta"].get("dev", "?")),
         ("Firmware", lambda r: r["meta"].get("fw", "?")),
@@ -677,12 +710,28 @@ def sweep_svg(runs, sizes):
     return "".join(s)
 
 
-def index_page(version=""):
-    return ("<!doctype html><meta charset=utf-8><title>h2h</title><style>" + CSS + "</style><main>"
-            "<h1>h2h server</h1><p class=note>Version <code>" + html.escape(version or server_version()) +
-            "</code></p><p>Targets: <code>/h2h/bytes/N</code>. Results: "
-            "<a href='/h2h/report'>report</a>, <a href='/h2h/report.txt'>report.txt</a>, "
-            "<a href='/h2h/runs.json'>runs.json</a>, <a href='/h2h/log.csv'>log.csv</a>.</p></main>")
+def index_page(version="", runs=None):
+    e = html.escape
+    out = ["<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+           "<title>h2h</title><style>" + CSS + "</style><main>"
+           "<h1>h2h server</h1><p class=note>Version <code>" + e(version or server_version()) +
+           "</code></p><p>Targets: <code>/h2h/bytes/N</code>. Results: "
+           "<a href='/h2h/report'>report</a>, <a href='/h2h/report.txt'>report.txt</a>, "
+           "<a href='/h2h/runs.json'>runs.json</a>, <a href='/h2h/log.csv'>log.csv</a>.</p>"]
+    runs = sorted((runs or {}).values(), key=lambda r: r["received"], reverse=True)
+    if runs:
+        rows = []
+        for r in runs:
+            who = r.get("who", "")
+            who_cell = (f"<a href='/h2h/report?who={quote(who)}'>{e(who)}</a>" if who else "-")
+            rows.append([who_cell, e(stack_label(r)),
+                         f"<a href='/h2h/report?runs={quote(r['key'])}'>{e(r['id'])}</a>",
+                         str(len(r.get("order", []))), e(r["received"])])
+        out.append(f"<h2>Runs</h2><p class=note>{len(runs)} runs, newest first. A tester's name shows "
+                   "their latest run of each stack; a run's number shows that run alone.</p>")
+        out.append(table(["Tester", "Stack", "Run", "Tests", "Received"], rows))
+    out.append("</main>")
+    return "".join(out)
 
 
 def local_addresses():
@@ -702,6 +751,7 @@ def main(argv=None):
     ap.add_argument("--data", default="results", help="directory for runs.json and requests.csv")
     ap.add_argument("--report", action="store_true", help="print the text report and exit")
     ap.add_argument("--runs", default="", help="with --report: runs to compare (keys or ids, comma-separated)")
+    ap.add_argument("--who", default="", help="with --report: only these testers' runs (comma-separated)")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--server-version", default=os.environ.get("H2H_VERSION", ""),
                     help="the version to show (default: $H2H_VERSION, the stamped one, or the git commit)")
@@ -717,7 +767,7 @@ def main(argv=None):
         return 0
     store = Store(args.data)
     if args.report:
-        sys.stdout.write(text_report(pick_runs(store.runs, args.runs), read_log(store.log_path), version))
+        sys.stdout.write(text_report(pick_runs(store.runs, args.runs, args.who), read_log(store.log_path), version))
         return 0
     Handler.store = store
     Handler.version = version

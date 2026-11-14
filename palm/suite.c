@@ -656,8 +656,13 @@ UInt16 suite_report(Char *buf, UInt16 size)
     else
         StrPrintF(line, "read %u (max %u)", link_default_chunk(), link_max_chunk());
     PutLine(&o, line);
-    if (gSettings)
+    if (gSettings) {
         PutLine(&o, gSettings->target);
+        if (gSettings->name[0]) {
+            Put(&o, "Tester ");
+            PutLine(&o, gSettings->name);
+        }
+    }
     FmtTime(a, gResults.usRun);
     StrPrintF(line, gResults.stopped ? "took %s, stopped early" : "took %s", a);
     PutLine(&o, line);
@@ -818,7 +823,7 @@ static Err Send(const Char *url)
 Err suite_upload(const Settings *settings, UInt16 *sent)
 {
     static Char url[URL_SIZE];
-    Char num[12], fw[48];
+    Char num[12], fw[48], line[96];  /* the header's longest piece is 72 */
     UInt32 v[23];
     UInt16 i, j, start;
     const Row *r;
@@ -834,9 +839,14 @@ Err suite_upload(const Settings *settings, UInt16 *sent)
     clk_start();
     err = link_start(fw, sizeof(fw));
     if (err == errNone) {
-        StrPrintF(url, "%s/h?id=%u&s=%s&n=%u&clkns=%lu&baud=%lu&def=%u&max=%u&run=%lu&fw=", settings->target,
-                  gResults.runId, link_stack(), gResults.count, clk_resolution_ns(), link_baud(),
+        /* The name early, where a long firmware string cannot crowd it out. */
+        StrPrintF(url, "%s/h?id=%u&s=%s&w=", settings->target, gResults.runId, link_stack());
+        UrlAppend(url, settings->name, sizeof(url));
+        StrPrintF(num, "&n=%u", gResults.count);
+        Append(url, num, sizeof(url));
+        StrPrintF(line, "&clkns=%lu&baud=%lu&def=%u&max=%u&run=%lu&fw=", clk_resolution_ns(), link_baud(),
                   link_default_chunk(), link_max_chunk(), gResults.usRun);
+        Append(url, line, sizeof(url));
         UrlAppend(url, gResults.firmware, sizeof(url));
         Append(url, "&dev=", sizeof(url));
         UrlAppend(url, gResults.device, sizeof(url));
@@ -854,8 +864,10 @@ Err suite_upload(const Settings *settings, UInt16 *sent)
         v[20] = r->usRecv; v[21] = r->resends; v[22] = (UInt16)r->lastErr;
         /* As many values per GET as fit the URL (classic N: takes 256). */
         for (start = 0; start < 23 && err == errNone; start = j) {
-            StrPrintF(url, "%s/r?id=%u&s=%s&t=%s&o=%u&v=", settings->target, gResults.runId,
-                      link_stack(), r->test, start);
+            StrPrintF(url, "%s/r?id=%u&s=%s&w=", settings->target, gResults.runId, link_stack());
+            UrlAppend(url, settings->name, sizeof(url));
+            StrPrintF(line, "&t=%s&o=%u&v=", r->test, start);
+            Append(url, line, sizeof(url));
             for (j = start; j < 23; j++) {
                 StrPrintF(num, j > start ? ",%lu" : "%lu", v[j]);
                 if (j > start && StrLen(url) + StrLen(num) + 8 > 240)
@@ -869,8 +881,10 @@ Err suite_upload(const Settings *settings, UInt16 *sent)
     }
     /* Notes made while sending count too, so the total goes with each. */
     for (i = 0; i < gResults.noteCount && i < H2H_NOTES && err == errNone; i++) {
-        StrPrintF(url, "%s/n?id=%u&s=%s&i=%u&of=%u&m=", settings->target, gResults.runId,
-                  link_stack(), i, gResults.noteCount);
+        StrPrintF(url, "%s/n?id=%u&s=%s&w=", settings->target, gResults.runId, link_stack());
+        UrlAppend(url, settings->name, sizeof(url));
+        StrPrintF(line, "&i=%u&of=%u&m=", i, gResults.noteCount);
+        Append(url, line, sizeof(url));
         UrlAppend(url, gResults.notes[i], sizeof(url));
         err = Send(url);
         if (err == errNone)

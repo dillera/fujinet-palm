@@ -120,6 +120,7 @@ typedef struct {
     UInt16 reps;
     Boolean big;        /* include the 64 KB download */
     Boolean sweep;      /* the read size sweep */
+    Char name[24];      /* the tester: sent with the results, so testers' runs stay apart */
 } Settings;
 
 typedef struct {
