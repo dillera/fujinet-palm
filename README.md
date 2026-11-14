@@ -37,7 +37,14 @@ make install-visor   # FI H2H RAM over a USB cradle; or on the Visor: FI H2H SB,
 make report          # every stack's latest run side by side, as text
 open http://localhost:8080/h2h/report    # the same, with charts
 make test            # host tests
+make dist            # the testers' zip: build/h2h-testers-<commit>.zip
+make server-release  # the server, version fixed: build/h2h-server-<commit>.zip
 ```
+
+`make dist` builds everything, then zips FN H2H, FI H2H, FI H2H SB, FI H2H NL
+and NioLib with a README.txt for testers (`dist/README-testers.txt`, with
+the commits it was built from filled in). The zip is named by this
+checkout's commit; commit first, or it is `-dirty`.
 
 The apps start with the target `http://fujinet.online:8199/h2h`, the shared
 server for every tester (`H2H_TARGET` overrides it at build time:
@@ -73,7 +80,13 @@ download; **64K** and **Sweep** add the long tests.
 ### The same target on the web
 
 `server/h2h_server.py` is a single file with no dependencies, so it runs
-unchanged on a web host (`python3 h2h_server.py --port 8080 --data results`).
+unchanged on a web host (`python3 h2h_server.py --port 8080 --data results`);
+the shared one is `http://fujinet.online:8199/h2h`. Its version is the git
+commit it runs from (`-dirty` if the file has changed since), or, for a copy
+outside a checkout, the one `make server-release` stamped into it;
+`--server-version` or `H2H_VERSION` overrides both. It is in every reply's
+`Server: h2h/<version>` header, at `/h2h/version`, on the index page, in
+both reports, and `python3 h2h_server.py --version` prints it.
 Point every Palm's target at it (`http://host:8080/h2h`) and all three stacks
 cross the same internet path to the same bytes. Running it on this Mac
 instead takes the internet out, which shows what the Palm, the link and the

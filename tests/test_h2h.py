@@ -77,6 +77,40 @@ class PatternAndStore(unittest.TestCase):
             self.assertIn("not split: the exchanges run inside the library", page)
 
 
+class Version(unittest.TestCase):
+    def test_version_is_shown_everywhere(self):
+        # The header, /h2h/version, the index page and both reports all name
+        # the server's version: here the one main() was given.
+        from urllib.request import urlopen
+        saved = h2h_server.Handler.version, h2h_server.Handler.server_version
+        h2h_server.Handler.version, h2h_server.Handler.server_version = "v-test", "h2h/v-test"
+        with tempfile.TemporaryDirectory() as d:
+            server = Server(d)
+            try:
+                base = f"http://127.0.0.1:{server.port}/h2h"
+                with urlopen(base + "/version") as r:
+                    self.assertEqual(r.read(), b"v-test\n")
+                    self.assertEqual(r.headers["Server"], "h2h/v-test")
+                for path in ("/", "/report", "/report.txt"):
+                    with urlopen(base + path) as r:
+                        self.assertIn(b"v-test", r.read(), path)
+            finally:
+                server.stop()
+                h2h_server.Handler.version, h2h_server.Handler.server_version = saved
+
+    def test_default_is_the_commit_and_a_stamp_fixes_it(self):
+        # In this checkout the version is the commit of the server file (or
+        # "unknown" outside git); a stamped copy keeps its own wherever it goes.
+        v = h2h_server.server_version()
+        self.assertTrue(v == "unknown" or v.split("-")[0].isalnum(), v)
+        self.assertEqual(h2h_server.server_version("given"), "given")
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "h2h_server.py")
+            h2h_server.stamp(out, "abc1234")
+            p = subprocess.run([sys.executable, out, "--version"], capture_output=True, text=True, check=True)
+            self.assertEqual(p.stdout.strip(), "abc1234")
+
+
 class EndToEnd(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

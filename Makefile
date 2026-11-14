@@ -6,6 +6,8 @@
 #   make test       host tests: the server, and the suite run on this Mac
 #   make install-iiic    queue FN H2H and FI H2H on the classic FujiNet (FUJINET) for HotSync
 #   make install-visor   HotSync FI H2H RAM (the Springboard app, for RAM) to the Visor over USB
+#   make dist            the testers' zip: build/h2h-testers-<commit>.zip (apps, NioLib, README.txt)
+#   make server-release  the server with its version fixed: build/h2h-server-<commit>.zip
 #
 # H2H_TARGET is the target the apps start with (changeable on the Palm): the
 # shared server on fujinet.online. The FujiNet, not the Palm, connects to it.
@@ -91,8 +93,32 @@ build/h2h-sb.rom: palm/build/FI_H2H_SB.prc palm/build/FI_H2H_NL.prc build/NioLib
 flash-visor: build/h2h-sb.rom
 	SBNIO_ROM=$(abspath build/h2h-sb.rom) $(SBNIO)/host/flash.sh
 
+# The testers' zip, named by this checkout's commit (-dirty with uncommitted
+# changes, which a zip for testers should not have). Its README.txt is
+# dist/README-testers.txt with the commits it was built from filled in.
+DIST_PRCS = palm/build/FN_H2H.prc palm/build/FI_H2H.prc palm/build/FI_H2H_SB.prc \
+            palm/build/FI_H2H_NL.prc $(NIOLIB)/NioLib.prc
+describe = $$(git -C $(1) describe --always --dirty --abbrev=7)
+
+dist: all
+	@mkdir -p build
+	@v=$(call describe,.); \
+	python3 tools/make_dist.py build/h2h-testers-$$v.zip dist/README-testers.txt VERSION=$$v \
+	  NIOLIB="$(call describe,$(REPOS)/fujinet-nio-lib) ($$(git -C $(REPOS)/fujinet-nio-lib branch --show-current))" \
+	  CLASSIC=$(call describe,$(CLASSIC)) -- $(DIST_PRCS); \
+	case $$v in *-dirty) echo "warning: built from uncommitted changes" >&2;; esac
+
+# The server as one file whose version is fixed (python3 h2h_server.py
+# --version shows it), for a host where it runs from a copy, not a checkout.
+server-release:
+	@mkdir -p build/server
+	@v=$$(python3 server/h2h_server.py --version); rm -f build/server/h2h_server.py; \
+	python3 server/h2h_server.py --stamp build/server/h2h_server.py && \
+	rm -f build/h2h-server-$$v.zip && (cd build/server && zip -q -X ../h2h-server-$$v.zip h2h_server.py) && \
+	echo "build/h2h-server-$$v.zip: h2h_server.py, version $$v"
+
 clean:
 	$(DOCKER) make clean
 	rm -f palm/icon.bmp build/h2h-sb.rom
 
-.PHONY: all niolib server report test install-iiic install-visor flash-visor clean
+.PHONY: all niolib server report test install-iiic install-visor flash-visor dist server-release clean

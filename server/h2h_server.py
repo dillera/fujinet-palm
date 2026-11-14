@@ -5,6 +5,12 @@ Python 3, no dependencies, so it runs on this Mac or on any web host:
 
     python3 server/h2h_server.py --port 8080 --data results
     python3 server/h2h_server.py --data results --report      # text report, no server
+    python3 server/h2h_server.py --version                    # which version this file is
+
+Its version is --server-version (or $H2H_VERSION) when given, else the one
+`make server-release` stamped into its copy, else the git commit of the
+checkout it runs from (-dirty when this file differs from that commit). It
+is in every reply's Server header, at /h2h/version, and on every page.
 
 Under /h2h:
   /bytes/N      N bytes (up to 4 MB), byte i = (i ^ (i >> 8)) & 0xFF, so the
@@ -18,6 +24,7 @@ Under /h2h:
   /report.txt   the same as text
   /runs.json    everything stored
   /log.csv      every request served: when, who, what, and how long it took here
+  /version      the server's version, as text
 
 Runs are kept in <data>/runs.json, the request log in <data>/requests.csv.
 """
@@ -28,6 +35,7 @@ import html
 import json
 import os
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -35,6 +43,41 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
 MAX_BYTES = 4 * 1024 * 1024
+
+# Set in the copy make server-release writes (--stamp); empty in the checkout.
+VERSION = ""
+
+
+def git_version(path):
+    """The commit of the git checkout holding path, when git tracks it there."""
+    where, name = os.path.split(os.path.abspath(path))
+
+    def git(*args):
+        return subprocess.run(["git", "-C", where, *args], capture_output=True, text=True, timeout=5)
+    try:
+        if git("ls-files", "--error-unmatch", name).returncode != 0:
+            return ""
+        head = git("rev-parse", "--short=7", "HEAD")
+        if head.returncode != 0:
+            return ""
+        dirty = git("diff", "--quiet", "HEAD", "--", name).returncode != 0
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return head.stdout.strip() + ("-dirty" if dirty else "")
+
+
+def server_version(override=""):
+    return override or VERSION or git_version(__file__) or "unknown"
+
+
+def stamp(out, version):
+    """Write a copy of this file whose VERSION is version."""
+    src = open(os.path.abspath(__file__)).read()
+    old = 'VERSION = ""\n'
+    if old not in src:
+        raise SystemExit("this copy is already stamped")
+    with open(out, "w") as f:
+        f.write(src.replace(old, f"VERSION = {version!r}\n", 1))
 
 # The order the Palm sends a row's values in (suite.c, suite_upload).
 FIELDS = [
@@ -149,9 +192,13 @@ def query(url):
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "h2h/1"
+    version = server_version()  # main() sets both from its arguments
+    server_version = "h2h/" + version
     protocol_version = "HTTP/1.1"
     store = None
+
+    def version_string(self):
+        return self.server_version
 
     def setup(self):
         self.t_accept = time.monotonic()
@@ -205,6 +252,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/n":
                 self.store.note(q, client)
                 return self._send(200, b"ok\n")
+            if path == "/version":
+                return self._send(200, (self.version + "\n").encode())
             if path == "/runs.json":
                 return self._send(200, json.dumps(self.store.runs, indent=1).encode(), "application/json")
             if path == "/log.csv":
@@ -214,10 +263,11 @@ class Handler(BaseHTTPRequestHandler):
                 runs = pick_runs(self.store.runs, q.get("runs", ""))
                 log = read_log(self.store.log_path)
                 if path == "/report":
-                    return self._send(200, html_report(runs, log).encode(), "text/html; charset=utf-8")
-                return self._send(200, text_report(runs, log).encode())
+                    return self._send(200, html_report(runs, log, self.version).encode(),
+                                      "text/html; charset=utf-8")
+                return self._send(200, text_report(runs, log, self.version).encode())
             if path == "":
-                return self._send(200, index_page().encode(), "text/html; charset=utf-8")
+                return self._send(200, index_page(self.version).encode(), "text/html; charset=utf-8")
         except (KeyError, ValueError) as e:
             return self._send(400, f"bad request: {e}\n".encode())
         return self._send(404, b"not found\n")
@@ -324,9 +374,10 @@ def notes(run):
     return [kept[k] for k in sorted(kept, key=int)], run.get("notes_total", len(kept))
 
 
-def text_report(runs, log):
+def text_report(runs, log, version=""):
+    tail = f"h2h server {version or server_version()}\n"
     if not runs:
-        return "No runs yet: run a test on a Palm, then tap Send.\n"
+        return "No runs yet: run a test on a Palm, then tap Send.\n" + tail
     w = 18
     lines = []
     head = "".ljust(w) + "".join(label(r)[:24].ljust(26) for r in runs)
@@ -427,7 +478,7 @@ def text_report(runs, log):
         if total:
             lines += ["", f"LINK NOTES: {label(r)} run {r['id']} ({total} in all)"]
             lines += ["  " + n for n in kept]
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines).rstrip("\n") + "\n\n" + tail
 
 
 CSS = """
@@ -448,13 +499,14 @@ th:first-child,td:first-child{text-align:left}thead th{color:var(--muted);font-w
 PART_COLORS = {"link send": "var(--s1)", "device wait": "var(--s2)", "link recv": "var(--s3)", "palm": "var(--s4)"}
 
 
-def html_report(runs, log):
+def html_report(runs, log, version=""):
     e = html.escape
     out = [f"<!doctype html><html><head><meta charset=utf-8><meta name=viewport content='width=device-width'>"
            f"<title>H2H report</title><style>{CSS}</style></head><body><main>",
            "<h1>FujiNet on the Palm: head to head</h1>",
            f"<p class=note>{len(runs)} runs, the latest of each stack unless ?runs= names them. "
-           "Times are the Palm's own, averaged over the repetitions that succeeded.</p>"]
+           "Times are the Palm's own, averaged over the repetitions that succeeded. "
+           f"h2h server <code>{e(version or server_version())}</code>.</p>"]
     if not runs:
         out.append("<p>No runs yet: run a test on a Palm, then tap Send.</p></main></body></html>")
         return "".join(out)
@@ -625,9 +677,10 @@ def sweep_svg(runs, sizes):
     return "".join(s)
 
 
-def index_page():
+def index_page(version=""):
     return ("<!doctype html><meta charset=utf-8><title>h2h</title><style>" + CSS + "</style><main>"
-            "<h1>h2h server</h1><p>Targets: <code>/h2h/bytes/N</code>. Results: "
+            "<h1>h2h server</h1><p class=note>Version <code>" + html.escape(version or server_version()) +
+            "</code></p><p>Targets: <code>/h2h/bytes/N</code>. Results: "
             "<a href='/h2h/report'>report</a>, <a href='/h2h/report.txt'>report.txt</a>, "
             "<a href='/h2h/runs.json'>runs.json</a>, <a href='/h2h/log.csv'>log.csv</a>.</p></main>")
 
@@ -650,17 +703,30 @@ def main(argv=None):
     ap.add_argument("--report", action="store_true", help="print the text report and exit")
     ap.add_argument("--runs", default="", help="with --report: runs to compare (keys or ids, comma-separated)")
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--server-version", default=os.environ.get("H2H_VERSION", ""),
+                    help="the version to show (default: $H2H_VERSION, the stamped one, or the git commit)")
+    ap.add_argument("--version", action="store_true", help="print the version and exit")
+    ap.add_argument("--stamp", metavar="OUT", help="write a copy of this file with its version fixed, and exit")
     args = ap.parse_args(argv)
+    version = server_version(args.server_version)
+    if args.version:
+        print(version)
+        return 0
+    if args.stamp:
+        stamp(args.stamp, version)
+        return 0
     store = Store(args.data)
     if args.report:
-        sys.stdout.write(text_report(pick_runs(store.runs, args.runs), read_log(store.log_path)))
+        sys.stdout.write(text_report(pick_runs(store.runs, args.runs), read_log(store.log_path), version))
         return 0
     Handler.store = store
+    Handler.version = version
+    Handler.server_version = "h2h/" + version
     httpd = ThreadingHTTPServer((args.bind, args.port), Handler)
     httpd.daemon_threads = True
     httpd.verbose = args.verbose
     where = ", ".join(f"http://{a}:{args.port}/h2h" for a in local_addresses()) or f"port {args.port}"
-    print(f"h2h server on {where}  (report: /h2h/report)", flush=True)
+    print(f"h2h server {version} on {where}  (report: /h2h/report)", flush=True)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
