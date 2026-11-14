@@ -29,7 +29,7 @@ def main(argv):
     tmp = out + ".tmp"
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
         info = zipfile.ZipInfo("README.txt", datetime.datetime.now().timetuple()[:6])
-        info.external_attr = 0o644 << 16
+        info.external_attr = 0o100644 << 16  # a regular file, rw-r--r--
         info.compress_type = zipfile.ZIP_DEFLATED
         z.writestr(info, text.replace("\n", "\r\n"))
         for f in files:
