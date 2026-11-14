@@ -14,14 +14,20 @@ WHICH APP
 Install the one(s) that match your setup (HotSync, or however you install
 .prc files):
 
-  FN_H2H.prc     Palm in a serial cradle, FujiNet running the classic
-                 firmware with Palm support.
-  FI_H2H.prc     Palm in a serial cradle, FujiNet running fujinet-nio.
-  FI_H2H_SB.prc  Handspring Visor with the Springboard NIO module.
-  FI_H2H_NL.prc  The same Visor setup, through the NioLib shared library.
-                 Needs NioLib.prc as well (see below).
+  FN_H2H.prc  Palm in a serial cradle, FujiNet running the classic
+              firmware with Palm support.
+  H2H.prc     Palm in a serial cradle, FujiNet running fujinet-nio.
+  H2H_SB.prc  Handspring Visor with the Springboard NIO module.
+  H2H_NL.prc  The same Visor setup, through the NioLib shared library.
+              Needs NioLib.prc as well (see below).
 
 All four can sit on one Palm side by side.
+
+Upgrading from an earlier zip: the apps lost their "FI " prefix (FI H2H is
+now H2H, FI H2H SB is H2H SB, and so on) but kept their creator codes, so
+delete the old FI H2H apps from the Palm before installing these. Settings
+carry over. On a Visor, Copy to RAM now replaces an old FI-named RAM copy
+by itself.
 
 
 RUNNING A TEST
@@ -53,7 +59,7 @@ The report shows the FujiNet's firmware or NIO version as the Palm saw it.
 
 SPRINGBOARD NOTES
 -----------------
-- Run FI H2H SB and FI H2H NL from RAM (installing them puts them there).
+- Run H2H SB and H2H NL from RAM (installing them puts them there).
   Each run is labelled "app in RAM".
 - On the computer that runs NIO for the module, set the packet link to 8192
   bytes in NIO's fujinet.yaml:
@@ -62,22 +68,24 @@ SPRINGBOARD NOTES
           capacity: 8192
   The default, 4096, drops any reply over 4 KB, so the sweep's largest sizes
   would time out.
-- FI H2H NL calls NioLib, which must be installed in RAM. NioLib.prc here
-  includes a fix for misread Springboard registers (without it, runs show
-  the odd I/O error), from fujinet-nio-lib
+- H2H NL calls NioLib, which must be installed in RAM. NioLib.prc here
+  is much faster than earlier builds (about 20 KB/s where they managed
+  1.2) and fixes misread Springboard registers (without the fix, runs show
+  the odd I/O error, or fail on large downloads), from fujinet-nio-lib
       @NIOLIB@
   It has no USB transport: if you rely on NioLib's USB transport,
   keep your own NioLib and skip this one. NioLib uses its Springboard
-  transport unless NIO Config saved another; FI H2H NL's results are
+  transport unless NIO Config saved another; H2H NL's results are
   labelled as Springboard runs either way.
 
 
 WHAT'S BEEN TESTED
 ------------------
-FI H2H SB and FI H2H NL have run on a Visor Prism with the Springboard NIO
-module. FN H2H and FI H2H have so far only run in an emulator (CloudpilotEmu,
-Palm IIIc, Palm OS 3.5): yours may be the first real run, so a note of what
-happened is especially useful.
+H2H SB and H2H NL have run on a Visor Prism with the Springboard NIO
+module, and H2H on a Palm IIIc in a serial cradle wired to an FN-RS232
+running fujinet-nio. FN H2H has so far only run in an emulator
+(CloudpilotEmu, Palm IIIc, Palm OS 3.5): yours may be its first real run,
+so a note of what happened is especially useful.
 
 
 SOURCE

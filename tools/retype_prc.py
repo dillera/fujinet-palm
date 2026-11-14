@@ -3,7 +3,7 @@
 
 The h2h ROM carries NioLib this way (type NLrm): Palm OS loads shared
 libraries by type and creator, so the ROM copy is never loaded from the slow
-module ROM; FI H2H NL's Install NioLib copies it into RAM as libr again.
+module ROM; H2H NL's Install NioLib copies it into RAM as libr again.
 
     tools/retype_prc.py NioLib.prc build/NioLib-rom.prc --name "NioLib (ROM copy)" --type NLrm
 """

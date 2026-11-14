@@ -1,4 +1,4 @@
-/* FI H2H's probe on fujinet-nio-lib's palmos-serial transport. The library
+/* H2H's probe on fujinet-nio-lib's palmos-serial transport. The library
  * is used as built; the linker wraps four of its functions (palm/Makefile):
  *
  *   --wrap=fn_transport_exchange --wrap=fn_transport_exchange_buffers

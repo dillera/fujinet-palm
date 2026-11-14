@@ -17,7 +17,7 @@
 #define FOURCC(s) (((UInt32)(UInt8)(s)[0] << 24) | ((UInt32)(UInt8)(s)[1] << 16) | \
                    ((UInt32)(UInt8)(s)[2] << 8) | (UInt32)(UInt8)(s)[3])
 #define APP_CREATOR FOURCC(APP_CREATOR_STR)
-/* Copy to RAM's name and creator for this app's RAM copy (FI H2H SB: FI H2H
+/* Copy to RAM's name and creator for this app's RAM copy (H2H SB: H2H
  * RAM, ANHR), so the two sit side by side in the Launcher. */
 #ifndef H2H_RAM_NAME
 #define H2H_RAM_NAME H2H_NAME " RAM"
@@ -361,9 +361,32 @@ static void Run(FormType *frm, Boolean pingOnly)
 
 /* ---------------------------------------------------------------- copy to RAM */
 
+/* Deletes every database in RAM (card 0) of this type and creator except
+ * (keepCard, keep), whatever its name: an older build's copy may have had
+ * another name ("FI H2H RAM"), and two apps with one creator confuse the
+ * Launcher. The search restarts after each delete. */
+static Err DeleteRamCopies(UInt32 dbType, UInt32 creator, UInt16 keepCard, LocalID keep)
+{
+    DmSearchStateType state;
+    UInt16 card;
+    LocalID id;
+    Boolean fresh = true;
+    Err err;
+
+    while (DmGetNextDatabaseByTypeCreator(fresh, &state, dbType, creator, false, &card, &id) == errNone && id) {
+        fresh = false;
+        if (card != 0 || (card == keepCard && id == keep))
+            continue;
+        if ((err = DmDeleteDatabase(0, id)) != errNone)
+            return err;
+        fresh = true;
+    }
+    return errNone;
+}
+
 /* Copies a resource database, resource by resource, into RAM (card 0) as
- * name/type/creator, replacing a database of that name there. On error no
- * half copy is left. */
+ * name/type/creator, replacing a database of that name there and any other
+ * of that type and creator. On error no half copy is left. */
 static Err CopyResourceDb(UInt16 card, LocalID from, const Char *name, UInt32 dbType, UInt32 creator)
 {
     UInt16 n, i, attr = 0, version = 0;
@@ -373,9 +396,10 @@ static Err CopyResourceDb(UInt16 card, LocalID from, const Char *name, UInt32 db
     DmResID resId;
     MemHandle h, nh;
     UInt32 size;
-    Err err = errNone;
+    Err err;
 
-    id = DmFindDatabase(0, name);
+    err = DeleteRamCopies(dbType, creator, card, from);
+    id = err == errNone ? DmFindDatabase(0, name) : 0;
     if (id)
         err = DmDeleteDatabase(0, id);
     id = 0;

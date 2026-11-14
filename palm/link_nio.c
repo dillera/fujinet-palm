@@ -1,4 +1,4 @@
-/* FI H2H's link: fujinet-nio through fujinet-nio-lib, as the FI apps use it.
+/* H2H's link: fujinet-nio through fujinet-nio-lib, as fujinet-palm's FI apps use it.
  * The same file serves both NIO builds; the transport underneath (cradle
  * serial or Springboard CS1) is chosen when linking, and its probe
  * (probe_serial.c or probe_sb.c) does the counting in gLink.

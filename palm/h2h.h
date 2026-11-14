@@ -1,9 +1,9 @@
 /* Head-to-head speed test: what every part of the app shares.
  *
  * One source, three builds (palm/Makefile):
- *   FN H2H     classic fujinet-firmware, FujiBus N1: over the cradle (link_classic.c)
- *   FI H2H     fujinet-nio over the cradle, fujinet-nio-lib palmos-serial (link_nio.c + probe_serial.c)
- *   FI H2H SB  fujinet-nio over a Springboard module, palmos-springboard (link_nio.c + probe_sb.c)
+ *   FN H2H  classic fujinet-firmware, FujiBus N1: over the cradle (link_classic.c)
+ *   H2H     fujinet-nio over the cradle, fujinet-nio-lib palmos-serial (link_nio.c + probe_serial.c)
+ *   H2H SB  fujinet-nio over a Springboard module, palmos-springboard (link_nio.c + probe_sb.c)
  * Every build runs the same tests (suite.c) against the same target server
  * (server/h2h_server.py) and reports the same numbers, so the three can be
  * compared line for line. */

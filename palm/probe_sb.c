@@ -1,4 +1,4 @@
-/* FI H2H SB's probe on fujinet-nio-lib's palmos-springboard transport.
+/* H2H SB's probe on fujinet-nio-lib's palmos-springboard transport.
  *
  * The library's one exchange over CS1 is fn_palmos_exchange
  * (src/platform/palmos/fn_palmos_exchange.c). The linker sends the library's
@@ -11,7 +11,9 @@
  * The bus accesses are the library's own macros (fn_palmos_internal.h), the
  * constants, the retry logic and the stable register reads are the library's
  * (2733ba1 plus read_stable, which reads RESP_SEQ, RESULT, RESP_LEN and
- * RESP_CHECK until two reads agree). Keep it in step if that file changes.
+ * RESP_CHECK until two reads agree, and read_reply_careful, which reads every
+ * reply word that way on the passes after a failed check). Keep it in step if
+ * that file changes.
  *
  * It also looks at what it lets through, without changing what the library
  * gets. A reply that passed the link's check word but is not a whole FujiBus
@@ -227,6 +229,72 @@ static uint8_t ReadReply(uint8_t *resp, uint16_t cap, uint16_t *resp_len, uint16
     return check == want;
 }
 
+/* One reply word, read until two reads agree; counts the words that did not
+ * agree at first. */
+static uint16_t WordStable(uint16_t offset, uint16_t *misreads)
+{
+    uint16_t a = FN_PALMOS_RD(offset), b, tries;
+
+    for (tries = 0; tries < STABLE_TRIES; tries++) {
+        b = FN_PALMOS_RD(offset);
+        if (b == a)
+            break;
+        if (!tries)
+            (*misreads)++;
+        a = b;
+    }
+    return a;
+}
+
+/* The library's read_reply_careful: ReadReply with every word read until two
+ * reads agree, for the passes after a failed check. */
+static uint8_t ReadReplyCareful(uint8_t *resp, uint16_t cap, uint16_t *resp_len, uint16_t *got,
+                                uint16_t *want_out)
+{
+    uint16_t offset = SBN_R_RESP, misreads = 0;
+    uint16_t n = ReadStable(SBN_R_RESP_LEN, "len"), want = ReadStable(SBN_R_RESP_CHECK, "check");
+    uint16_t keep, pairs, words, w, check = 0;
+    Char line[H2H_NOTE_LEN];
+
+    *got = 0;
+    *want_out = want;
+    if (n > SBN_RESP_MAX)
+        return 0;
+    gLink.bytesIn += 4 + ((n + 1) & ~1);
+    keep = n < cap ? n : cap;
+    pairs = keep >> 1;
+    words = ((n + 1) >> 1) - pairs;
+    while (pairs--) {
+        w = WordStable(offset, &misreads);
+        offset += 2;
+        check = SBN_CHECK_STEP(check, w);
+        resp[0] = (uint8_t)(w >> 8);
+        resp[1] = (uint8_t)w;
+        resp += 2;
+    }
+    if (words) {
+        w = WordStable(offset, &misreads);
+        offset += 2;
+        check = SBN_CHECK_STEP(check, w);
+        if (keep & 1)
+            *resp = (uint8_t)(w >> 8);
+        words--;
+    }
+    while (words--) {
+        w = WordStable(offset, &misreads);
+        offset += 2;
+        check = SBN_CHECK_STEP(check, w);
+    }
+    if (misreads) {
+        StrPrintF(line, "#%u careful read: %u words read twice", (UInt16)_fn_palmos_seq, misreads);
+        Note(line);
+    }
+    *resp_len = keep;
+    *got = check;
+    *want_out = want;
+    return check == want;
+}
+
 uint16_t __wrap_fn_palmos_exchange(const uint8_t *req, uint16_t len, uint8_t *resp, uint16_t cap,
                                    uint16_t *resp_len)
 {
@@ -298,7 +366,8 @@ uint16_t __wrap_fn_palmos_exchange(const uint8_t *req, uint16_t len, uint8_t *re
     for (tries = 0; tries <= READ_RETRIES; tries++) {
         if (tries)
             gLink.resends++;
-        if (ReadReply(resp, cap, resp_len, &got, &want)) {
+        if (tries ? ReadReplyCareful(resp, cap, resp_len, &got, &want)
+                  : ReadReply(resp, cap, resp_len, &got, &want)) {
             gLink.usRecv += clk_us() - tr;
             gLink.usLink += clk_us() - t0;
             CheckReply(req, resp, cap, resp_len);

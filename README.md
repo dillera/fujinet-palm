@@ -7,13 +7,13 @@ server and reports the same numbers, so the stacks can be compared line by line:
 | App | Creator | Palm | Link | FujiNet |
 |---|---|---|---|---|
 | **FN H2H** | `ADHH` | Palm IIIc | serial cradle, 115200, classic FujiBus | FN-RS232 running classic **fujinet-firmware** |
-| **FI H2H** | `ANHH` | Palm IIIc | serial cradle, 115200, NIO FujiBus | **fujinet-nio** (on the FN-RS232, or on this Mac) |
-| **FI H2H SB** | `ANHB` | Visor (Prism) | Springboard module, CS1 bus | RP2350 + **fujinet-nio** on this Mac |
-| **FI H2H NL** | `ANHN` | Visor (Prism) | the same, through the installed **NioLib** | RP2350 + **fujinet-nio** on this Mac |
+| **H2H** | `ANHH` | Palm IIIc | serial cradle, 115200, NIO FujiBus | **fujinet-nio** (on the FN-RS232, or on this Mac) |
+| **H2H SB** | `ANHB` | Visor (Prism) | Springboard module, CS1 bus | RP2350 + **fujinet-nio** on this Mac |
+| **H2H NL** | `ANHN` | Visor (Prism) | the same, through the installed **NioLib** | RP2350 + **fujinet-nio** on this Mac |
 
 The two serial apps separate *firmware* (same Palm, same cable, classic or NIO).
 The two NIO apps separate *link* (same NIO, serial or Springboard).
-FI H2H SB and FI H2H NL separate *library*: SB links fujinet-nio-lib's static
+H2H SB and H2H NL separate *library*: SB links fujinet-nio-lib's static
 palmos-springboard archive, NL only `libniolib-client.a` and calls mozzwald's
 installed NioLib (fujinet-nio-lib's palmos-shared target, in RAM).
 
@@ -28,12 +28,12 @@ tools/      make_icon.py
 ## Running it
 
 ```sh
-make                 # palm/build/FN_H2H.prc, FI_H2H.prc, FI_H2H_SB.prc (palmdev Docker image)
+make                 # palm/build/FN_H2H.prc, H2H.prc, H2H_SB.prc (palmdev Docker image)
 make server          # the target on this Mac, port 8080; results go to results/
-make install-iiic    # queue FN H2H + FI H2H on the classic FujiNet, then press HotSync on the cradle
+make install-iiic    # queue FN H2H + H2H on the classic FujiNet, then press HotSync on the cradle
 make install-visor   # palm-sync over USB, then press HotSync on the Visor's cradle
-make flash-visor     # or: FI H2H SB in the Springboard module's ROM, flashed, then reset the Visor
-make install-visor   # FI H2H RAM over a USB cradle; or on the Visor: FI H2H SB, Options > Copy to RAM
+make flash-visor     # or: H2H SB in the Springboard module's ROM, flashed, then reset the Visor
+make install-visor   # H2H RAM over a USB cradle; or on the Visor: H2H SB, Options > Copy to RAM
 make report          # every stack's latest run side by side, as text
 open http://localhost:8080/h2h/report    # the same, with charts
 make test            # host tests
@@ -41,7 +41,7 @@ make dist            # the testers' zip: build/h2h-testers-<commit>.zip
 make server-release  # the server, version fixed: build/h2h-server-<commit>.zip
 ```
 
-`make dist` builds everything, then zips FN H2H, FI H2H, FI H2H SB, FI H2H NL
+`make dist` builds everything, then zips FN H2H, H2H, H2H SB, H2H NL
 and NioLib with a README.txt for testers (`dist/README-testers.txt`, with
 the commits it was built from filled in). The zip is named by this
 checkout's commit; commit first, or it is `-dirty`.
@@ -66,7 +66,7 @@ download; **64K** and **Sweep** add the long tests.
 
 - **Visor + Springboard**: as in `~/code/springboard-nio`: module flashed,
   `host/nio.sh start` (NIO on this Mac on the module's USB port).
-  `make flash-visor` puts FI H2H SB and FI H2H NL in the module ROM ("SBNIO
+  `make flash-visor` puts H2H SB and H2H NL in the module ROM ("SBNIO
   0.4 H2H": SB NIO and the two apps, 57 of its 64 KB; NIO Net, FI Config,
   ISS Tracker and Weather make way), builds the module firmware with it,
   flashes the module and restarts NIO; then reset the Visor. Set NIO's packet link to 8192 bytes,
@@ -78,7 +78,7 @@ download; **64K** and **Sweep** add the long tests.
 - **Palm IIIc + NIO**: either flash the FN-RS232 with NIO
   (`fujibus-gpio-rs232-cdc-log-s3-wroom-1-n16r8`, see `../fujinet-nio-palm-install.pdf`),
   or move the cradle cable to this Mac's USB serial adapter and run NIO's
-  `fujibus-rs232` POSIX build on it. Run **FI H2H**. Note which in your notes:
+  `fujibus-rs232` POSIX build on it. Run **H2H**. Note which in your notes:
   the report shows NIO's version and build profile, which tells them apart.
 
 ### The same target on the web
@@ -101,18 +101,18 @@ runs ping plus a repeated GET of that page, with no size or content check, so
 a real public site can be timed. Its results stay on the Palm (Send needs an
 h2h server).
 
-### FI H2H NL and NioLib
+### H2H NL and NioLib
 
 `make` also builds NioLib for Palm OS 3.5 (`make niolib`: the palmdev-py image,
-without the USB transport, which needs the Handspring SDK). FI H2H NL needs
+without the USB transport, which needs the Handspring SDK). H2H NL needs
 NioLib in the Visor's RAM. For a Visor without it, flash a ROM with NioLib in
-place of FI H2H SB (`SB_ROM_APPS`, see the Makefile; 60 of 64 KB). NioLib
+place of H2H SB (`SB_ROM_APPS`, see the Makefile; 60 of 64 KB). NioLib
 travels there as `NioLib (ROM copy)`, type `NLrm`, so Palm OS never loads it
-from the module; on the Visor, FI H2H NL's **Options > Install NioLib** copies
+from the module; on the Visor, H2H NL's **Options > Install NioLib** copies
 it into RAM as the real `NioLib` (`libr`/`NiL1`), which is where NioLib's guide
 wants it (it refuses while NioLib is loaded). NioLib uses its Springboard
 transport unless NIO Config saved another. **Options > Copy to RAM** makes
-FI H2H NL RAM, as for FI H2H SB.
+H2H NL RAM, as for H2H SB.
 
 NioLib makes its exchanges inside its own code, where the app's probe cannot
 reach: its runs report each call's total time, and the link split shows as
@@ -214,11 +214,11 @@ receive) with the same clock reads.
 - `make test`: the server, and the suite on the Mac against it (all sizes,
   sweep, upload, both reports, a corrupted body caught).
 - CloudpilotEmu, Palm IIIc OS 3.5 image: **FN H2H** against FujiNet-PC
-  (classic) and **FI H2H** against NIO's POSIX `fujibus-rs232` build, full
+  (classic) and **H2H** against NIO's POSIX `fujibus-rs232` build, full
   suite, Send and Memo. The emulator's serial timing is not a real Palm's, so
   its numbers mean nothing; it proved the apps, the timer, the uploads and
   the report.
-- **FI H2H SB** builds and links, but no emulator has a Springboard: its first
+- **H2H SB** builds and links, but no emulator has a Springboard: its first
   run is on the Visor.
 
 On the Visor (2026-11-14):
@@ -234,8 +234,8 @@ On the Visor (2026-11-14):
   only after `log on`. The notes show each misread the probe catches.
 - **Code in the module ROM is slow.** On the 64K download 74% of the time
   was the Palm between exchanges: the library, the app and the body check,
-  all fetched over the Springboard bus with no cache. FI H2H RAM is the same
-  app in RAM (FI H2H SB's Options > Copy to RAM writes it, resource by
+  all fetched over the Springboard bus with no cache. H2H RAM is the same
+  app in RAM (H2H SB's Options > Copy to RAM writes it, resource by
   resource, with no cradle); its results are labelled `nio-springboard-ram`,
   so the two runs show what running from the module costs.
 

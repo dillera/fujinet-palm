@@ -3,9 +3,9 @@
 #   /repos    fujinet-nio-workspace/repos (fujinet-nio-lib, and fujinet-nio for sbnio.h)
 #   /classic  classic/fujinet-palm (its common/fujibus.c, the FujiBus codec)
 #
-#   FN H2H     ADHH  classic fujinet-firmware over the cradle
-#   FI H2H     ANHH  fujinet-nio over the cradle (palmos-serial)
-#   FI H2H SB  ANHB  fujinet-nio over the Springboard module (palmos-springboard)
+#   FN H2H  ADHH  classic fujinet-firmware over the cradle
+#   H2H     ANHH  fujinet-nio over the cradle (palmos-serial)
+#   H2H SB  ANHB  fujinet-nio over the Springboard module (palmos-springboard)
 #
 # The NIO library is built here, into build/, from its own sources, with
 # larger packet buffers than its targets ship with (PACKET_SERIAL,
@@ -37,7 +37,7 @@ NIO_INC = -I$(NIO_LIB)/include -I$(NIO_LIB)/include/palmos
 LIB_SERIAL = $(B)/lib-serial/fujinet-nio-palmos-serial.a
 LIB_SB = $(B)/lib-sb/fujinet-nio-palmos-springboard.a
 
-all: $(B)/FN_H2H.prc $(B)/FI_H2H.prc $(B)/FI_H2H_SB.prc $(B)/FI_H2H_RAM.prc $(B)/FI_H2H_NL.prc
+all: $(B)/FN_H2H.prc $(B)/H2H.prc $(B)/H2H_SB.prc $(B)/H2H_RAM.prc $(B)/H2H_NL.prc
 
 $(B)/bin.stamp: h2h.rcp h2h_rsc.h icon.bmp
 	mkdir -p $(B)/bin
@@ -86,7 +86,7 @@ $(B)/fn/h2h: $(APP_SRC) link_classic.c $(CLASSIC)/fujibus.c h2h.h
 $(B)/fi/h2h: $(APP_SRC) link_nio.c probe_serial.c h2h.h $(LIB_SERIAL)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(NIO_INC) -DFN_MAX_PACKET_SIZE=$(PACKET_SERIAL) -DH2H_DEFAULT_CHUNK=$(CHUNK_SERIAL) \
-	  '-DAPP_CREATOR_STR="ANHH"' '-DH2H_NAME="FI H2H"' \
+	  '-DAPP_CREATOR_STR="ANHH"' '-DH2H_NAME="H2H"' \
 	  -o $@ $(APP_SRC) link_nio.c probe_serial.c $(LIB_SERIAL) \
 	  -Wl,--wrap=fn_transport_exchange,--wrap=fn_transport_exchange_buffers \
 	  -Wl,--wrap=fn_channel_write_byte,--wrap=fn_channel_read_byte
@@ -95,18 +95,18 @@ $(B)/sb/h2h: $(APP_SRC) link_nio.c probe_sb.c h2h.h $(LIB_SB)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(NIO_INC) -I$(NIO_LIB)/src/platform/palmos -I$(SBNIO_INC) \
 	  -DFN_MAX_PACKET_SIZE=$(PACKET_SB) -DH2H_DEFAULT_CHUNK=$(CHUNK_SB) -DH2H_SPRINGBOARD \
-	  '-DAPP_CREATOR_STR="ANHB"' '-DH2H_NAME="FI H2H SB"' \
-	  '-DH2H_RAM_NAME="FI H2H RAM"' '-DH2H_RAM_CREATOR_STR="ANHR"' \
+	  '-DAPP_CREATOR_STR="ANHB"' '-DH2H_NAME="H2H SB"' \
+	  '-DH2H_RAM_NAME="H2H RAM"' '-DH2H_RAM_CREATOR_STR="ANHR"' \
 	  -o $@ $(APP_SRC) link_nio.c probe_sb.c $(LIB_SB) -Wl,--wrap=fn_palmos_exchange
 
 $(B)/FN_H2H.prc: $(B)/fn/h2h $(B)/bin.stamp Makefile
 	$(call prc,fn,"FN H2H",ADHH)
 
-$(B)/FI_H2H.prc: $(B)/fi/h2h $(B)/bin.stamp Makefile
-	$(call prc,fi,"FI H2H",ANHH)
+$(B)/H2H.prc: $(B)/fi/h2h $(B)/bin.stamp Makefile
+	$(call prc,fi,"H2H",ANHH)
 
-$(B)/FI_H2H_SB.prc: $(B)/sb/h2h $(B)/bin.stamp Makefile
-	$(call prc,sb,"FI H2H SB",ANHB)
+$(B)/H2H_SB.prc: $(B)/sb/h2h $(B)/bin.stamp Makefile
+	$(call prc,sb,"H2H SB",ANHB)
 
 # The same app under its own name and creator, for RAM next to the module's
 # ROM copy (HotSync it): the two runs show what fetching the code over the
@@ -115,13 +115,13 @@ $(B)/sbr/h2h: $(APP_SRC) link_nio.c probe_sb.c h2h.h $(LIB_SB)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(NIO_INC) -I$(NIO_LIB)/src/platform/palmos -I$(SBNIO_INC) \
 	  -DFN_MAX_PACKET_SIZE=$(PACKET_SB) -DH2H_DEFAULT_CHUNK=$(CHUNK_SB) -DH2H_SPRINGBOARD \
-	  '-DAPP_CREATOR_STR="ANHR"' '-DH2H_NAME="FI H2H RAM"' \
+	  '-DAPP_CREATOR_STR="ANHR"' '-DH2H_NAME="H2H RAM"' \
 	  -o $@ $(APP_SRC) link_nio.c probe_sb.c $(LIB_SB) -Wl,--wrap=fn_palmos_exchange
 
-$(B)/FI_H2H_RAM.prc: $(B)/sbr/h2h $(B)/bin.stamp Makefile
-	$(call prc,sbr,"FI H2H RAM",ANHR)
+$(B)/H2H_RAM.prc: $(B)/sbr/h2h $(B)/bin.stamp Makefile
+	$(call prc,sbr,"H2H RAM",ANHR)
 
-# FI H2H NL: the same tests through the installed NioLib (fujinet-nio-lib's
+# H2H NL: the same tests through the installed NioLib (fujinet-nio-lib's
 # palmos-shared target, built apart: make niolib at the top), linking only its
 # client archive. NioLib's packets are 1024 bytes on every transport, so reads
 # stop at 1002. Its exchanges run inside NioLib, where no probe reaches.
@@ -129,12 +129,12 @@ NIOLIB_BUILD ?= $(NIO_LIB)/build/palmos-shared-$(SDK)
 $(B)/nl/h2h: $(APP_SRC) link_nio.c probe_niolib.c h2h.h $(NIOLIB_BUILD)/libniolib-client.a
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(NIO_INC) -DFN_MAX_PACKET_SIZE=1024 -DH2H_DEFAULT_CHUNK=1002 -DH2H_NIOLIB \
-	  '-DAPP_CREATOR_STR="ANHN"' '-DH2H_NAME="FI H2H NL"' \
-	  '-DH2H_RAM_NAME="FI H2H NL RAM"' '-DH2H_RAM_CREATOR_STR="ANHM"' \
+	  '-DAPP_CREATOR_STR="ANHN"' '-DH2H_NAME="H2H NL"' \
+	  '-DH2H_RAM_NAME="H2H NL RAM"' '-DH2H_RAM_CREATOR_STR="ANHM"' \
 	  -o $@ $(APP_SRC) link_nio.c probe_niolib.c $(NIOLIB_BUILD)/libniolib-client.a
 
-$(B)/FI_H2H_NL.prc: $(B)/nl/h2h $(B)/bin.stamp Makefile
-	$(call prc,nl,"FI H2H NL",ANHN)
+$(B)/H2H_NL.prc: $(B)/nl/h2h $(B)/bin.stamp Makefile
+	$(call prc,nl,"H2H NL",ANHN)
 
 clean:
 	rm -rf $(B)
