@@ -64,6 +64,11 @@ void probe_log(const Char *line);
 #define h2hErrNoMemory  (appErrorClass | 0x45)
 
 const Char *link_stack(void);     /* short id in results: "classic-serial" */
+#ifdef H2H_HOST_STACK
+/* Built into another app, that app provides the stack and its title. */
+const Char *h2h_host_stack(void);
+const Char *h2h_host_title(void);
+#endif
 const Char *link_title(void);     /* "Classic FujiBus, cradle" */
 /* Opens the link and asks the device who it is; fw gets a version line. */
 Err link_start(Char *fw, UInt16 fwSize);

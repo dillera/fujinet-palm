@@ -98,6 +98,9 @@ STACKS = {
     "nio-springboard-ram": "NIO, Springboard (RAM)",
     "niolib-springboard": "NioLib, Springboard",
     "niolib-springboard-ram": "NioLib, Springboard (RAM)",
+    "niolib-network": "NioLib, Network (NIO on the Palm)",
+    "niolib-serial": "NioLib, cradle serial",
+    "niolib-usb": "NioLib, USB",
 }
 
 _pattern_cache = {}

@@ -22,7 +22,13 @@ static fn_handle_t gHandle;
 static Boolean gHandleOpen;
 static UInt32 gOffset;
 
-#if defined(H2H_SPRINGBOARD) || defined(H2H_NIOLIB)
+#if defined(H2H_HOST_STACK)
+/* Built into another app (NIO Config's H2H page), which names the stack from
+ * the NioLib transport it runs through. */
+const Char *link_stack(void) { return h2h_host_stack(); }
+const Char *link_title(void) { return h2h_host_title(); }
+UInt32 link_baud(void) { return 0; }
+#elif defined(H2H_SPRINGBOARD) || defined(H2H_NIOLIB)
 /* Whether this copy of the app runs from the module's ROM (card 1 on), where
  * the Palm fetches every instruction over the Springboard bus, or from RAM. */
 static Boolean InModuleRom(void)
