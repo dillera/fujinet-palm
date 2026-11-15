@@ -4,3 +4,4 @@ palm/build/
 palm/icon.bmp
 __pycache__/
 *.zip
+.DS_Store
