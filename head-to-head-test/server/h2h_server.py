@@ -525,6 +525,26 @@ th:first-child,td:first-child{text-align:left}thead th{color:var(--muted);font-w
 .wrap{overflow-x:auto}.bar{display:flex;height:16px;border-radius:3px;overflow:hidden;min-width:160px}
 .bar span{display:block;height:100%}.k{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 12px}
 .best{font-weight:700}.fail{color:#dc2626}
+:root{--c1:#2a78d6;--c2:#eb6834;--c3:#1baf7a;--c4:#eda100;--c5:#e87ba4;--c6:#008300;--c7:#6250d6;--c8:#e34948}
+@media (prefers-color-scheme:dark){:root{--c1:#3987e5;--c2:#d95926;--c3:#199e70;--c4:#c98500;--c5:#d55181;
+--c6:#008300;--c7:#9085e9;--c8:#e66767}}
+.sweep{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:12px 0}
+.sweep .bar2{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.sweep .bar2 .t{color:var(--muted);font-size:13px;margin-right:auto}
+.sweep button{font:inherit;font-size:13px;color:var(--fg);background:var(--bg);border:1px solid var(--line);
+border-radius:6px;padding:3px 10px;cursor:pointer}.sweep button[aria-pressed=true]{border-color:var(--muted)}
+.sweep .plot{position:relative;height:440px;min-height:260px;resize:vertical;overflow:hidden}
+.sweep .plot>svg{display:block;width:100%;height:100%}.sweep .tip svg{flex:none}
+.sweep .legend{display:flex;flex-wrap:wrap;gap:2px 6px;margin-top:8px}
+.sweep .legend button{display:flex;align-items:center;gap:6px;border-color:transparent;background:none;padding:2px 6px}
+.sweep .legend button:hover{border-color:var(--line)}.sweep .legend button[aria-pressed=false]{opacity:.4}
+.sweep .legend small{color:var(--muted)}
+.sweep .tip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:6px;
+padding:6px 8px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.15);display:none;white-space:nowrap;z-index:2}
+.sweep .tip b{display:block;margin-bottom:2px}.sweep .tip div{display:flex;align-items:center;gap:6px}
+.sweep .tip span.v{margin-left:auto;padding-left:12px;font-variant-numeric:tabular-nums}
+.sweep.big{position:fixed;inset:12px;z-index:10;margin:0;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.35)}
+.sweep.big .plot{flex:1;height:auto;resize:none}
 """
 
 PART_COLORS = {"link send": "var(--s1)", "device wait": "var(--s2)", "link recv": "var(--s3)", "palm": "var(--s4)"}
@@ -659,7 +679,7 @@ def html_report(runs, log, version=""):
                 cells.append(f"<span{cls}>{kbs(row):.1f}{star}</span>")
             rows.append(cells)
         out.append(table(["Read size"] + [label(r) for r in runs], rows))
-        out.append(sweep_svg(runs, sizes))
+        out.append(sweep_chart(runs, sizes))
 
     out.append("<h2>Every number</h2>")
     for r in runs:
@@ -675,42 +695,223 @@ def html_report(runs, log, version=""):
     return "".join(out)
 
 
-def sweep_svg(runs, sizes):
-    w, h, pad = 720, 260, 44
-    colors = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)"]
-    series = []
-    top = 1.0
+# The sweep chart's encoding. Colour follows the stack's family (link and library), in the palette's fixed order, so
+# a stack keeps its colour whatever runs are shown; runs of one family differ by dash and marker. Up to 8 families,
+# each with as many runs as there are; the ninth family on shares slot 8.
+FAMILY_SLOT = {"nio-springboard": 1, "nio-springboard-ram": 1, "niolib-springboard": 2, "niolib-springboard-ram": 2,
+               "nio-serial": 3, "classic-serial": 4, "niolib-network": 5, "niolib-serial": 6, "niolib-usb": 7}
+DASHES = ["", "7 4", "2 3", "10 3 2 3", "4 2", "1 3"]
+MARKERS = ["circle", "square", "triangle", "diamond"]
+
+
+def run_styles(runs):
+    """Per run: its colour slot, dash and marker, numbered within its family in the order given."""
+    seen, out = {}, []
     for r in runs:
-        pts = [(n, kbs(r["rows"][f"sw{n}"])) for n in sizes if good(r["rows"].get(f"sw{n}"))]
-        series.append((r, pts))
-        top = max([top] + [v for _, v in pts])
-    import math
-    lo, hi = math.log2(min(sizes)), math.log2(max(sizes)) if len(sizes) > 1 else math.log2(min(sizes)) + 1
+        slot = FAMILY_SLOT.get(r["stack"], 8)
+        i = seen.get(slot, 0)
+        seen[slot] = i + 1
+        out.append((slot, DASHES[i % len(DASHES)], MARKERS[(i // len(DASHES) + i) % len(MARKERS)]))
+    return out
 
-    def x(n):
-        return pad + (math.log2(n) - lo) / max(hi - lo, 1e-9) * (w - 2 * pad)
 
-    def y(v):
-        return h - pad + 10 - v / top * (h - 2 * pad)
+def marker_svg(kind, x, y, r, fill, ring):
+    if kind == "square":
+        return f"<rect x='{x - r:.1f}' y='{y - r:.1f}' width='{2 * r}' height='{2 * r}' fill='{fill}' stroke='{ring}' stroke-width='2'/>"
+    if kind == "triangle":
+        return (f"<polygon points='{x:.1f},{y - r - 1:.1f} {x + r + 1:.1f},{y + r:.1f} {x - r - 1:.1f},{y + r:.1f}' "
+                f"fill='{fill}' stroke='{ring}' stroke-width='2'/>")
+    if kind == "diamond":
+        return (f"<polygon points='{x:.1f},{y - r - 1:.1f} {x + r + 1:.1f},{y:.1f} {x:.1f},{y + r + 1:.1f} {x - r - 1:.1f},{y:.1f}' "
+                f"fill='{fill}' stroke='{ring}' stroke-width='2'/>")
+    return f"<circle cx='{x:.1f}' cy='{y:.1f}' r='{r}' fill='{fill}' stroke='{ring}' stroke-width='2'/>"
 
-    s = [f"<div class=wrap><svg viewBox='0 0 {w} {h}' width='100%' style='max-width:{w}px' role=img "
-         "aria-label='Body rate by read size'>"]
-    s.append(f"<line x1={pad} y1={y(0):.1f} x2={w - pad} y2={y(0):.1f} stroke='var(--line)'/>")
-    for n in sizes:
-        s.append(f"<text x={x(n):.1f} y={h - 12} text-anchor=middle font-size=11 fill='var(--muted)'>{n}</text>")
-    for i in range(5):
-        v = top * i / 4
-        s.append(f"<text x={pad - 6} y={y(v) + 4:.1f} text-anchor=end font-size=11 fill='var(--muted)'>{v:.0f}</text>")
-    for i, (r, pts) in enumerate(series):
-        c = colors[i % len(colors)]
-        if pts:
-            s.append(f"<polyline fill=none stroke='{c}' stroke-width=2 points='"
-                     + " ".join(f"{x(n):.1f},{y(v):.1f}" for n, v in pts) + "'/>")
-            for n, v in pts:
-                s.append(f"<circle cx={x(n):.1f} cy={y(v):.1f} r=3 fill='{c}'><title>{n}: {v:.1f} KB/s</title></circle>")
-        s.append(f"<text x={pad + 8 + i * 230} y=16 font-size=12 fill='{c}'>&#9632; {html.escape(label(r))}</text>")
-    s.append(f"<text x={pad - 30} y={pad - 14} font-size=11 fill='var(--muted)'>KB/s</text></svg></div>")
-    return "".join(s)
+
+def swatch_svg(slot, dash, marker):
+    c = f"var(--c{slot})"
+    d = f" stroke-dasharray='{dash}'" if dash else ""
+    return (f"<svg width='34' height='14' aria-hidden='true'><line x1='1' y1='7' x2='33' y2='7' stroke='{c}' "
+            f"stroke-width='2'{d}/>{marker_svg(marker, 17, 7, 4, c, 'var(--card)')}</svg>")
+
+
+def sweep_chart(runs, sizes):
+    """The sweep as a chart: every run a line of its body rate (KB/s) by read size. It is drawn in the page by
+    SWEEP_JS from the data here, so it fits its box: a log scale (default) or linear, a crosshair listing every run
+    at the read size under the pointer, a legend that hides or picks out runs, and Bigger (the whole window) or the
+    plot's drag handle for a taller one. The table above holds the same numbers."""
+    styles = run_styles(runs)
+    data = {"sizes": sizes, "runs": []}
+    for r, (slot, dash, marker) in zip(runs, styles):
+        pts, fails = [], []
+        for n in sizes:
+            row = r["rows"].get(f"sw{n}")
+            if good(row):
+                pts.append([n, round(kbs(row), 2)])
+            elif row:
+                fails.append(n)
+        data["runs"].append({"label": label(r), "id": r["id"], "slot": slot, "dash": dash, "marker": marker,
+                             "def": int(r["meta"]["def"]) if str(r["meta"].get("def", "")).isdigit() else None,
+                             "points": pts, "fails": fails})
+    rates = [v for d in data["runs"] for _, v in d["points"] if v > 0]
+    data["log"] = bool(rates) and max(rates) / min(rates) > 8
+    legend = "".join(
+        f"<button type=button aria-pressed=true data-i={i}>{swatch_svg(slot, dash, marker)}"
+        f"<span>{html.escape(label(r))} <small>run {html.escape(r['id'])}</small></span></button>"
+        for i, (r, (slot, dash, marker)) in enumerate(zip(runs, styles)))
+    blob = json.dumps(data).replace("</", "<\\/")
+    return ("<div class=sweep id=sweep><div class=bar2><span class=t>Body rate (KB/s) by read size, every run. "
+            "Hover for values; tap a run below to hide it.</span>"
+            "<button type=button class=log aria-pressed=false>Linear scale</button>"
+            "<button type=button class=bigger aria-pressed=false>Bigger</button></div>"
+            "<div class=plot role=img aria-label='Body rate in KB/s by read size, one line per run'>"
+            "<div class=tip></div></div>"
+            f"<div class=legend>{legend}</div></div>"
+            f"<script type=application/json id=sweep-data>{blob}</script><script>{SWEEP_JS}</script>")
+
+
+SWEEP_JS = r"""
+(function () {
+  var root = document.getElementById('sweep'), data = JSON.parse(document.getElementById('sweep-data').textContent);
+  var plot = root.querySelector('.plot'), tip = root.querySelector('.tip'), logBtn = root.querySelector('.log');
+  var bigBtn = root.querySelector('.bigger'), legend = root.querySelectorAll('.legend button');
+  var NS = 'http://www.w3.org/2000/svg', sizes = data.sizes, runs = data.runs;
+  var useLog = data.log, hidden = {}, focus = -1, svg = null, geom = null;
+  function el(tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function marker(kind, x, y, r, fill, ring, parent) {
+    var a = {fill: fill, stroke: ring, 'stroke-width': 2};
+    if (kind === 'square') { a.x = x - r; a.y = y - r; a.width = 2 * r; a.height = 2 * r; return el('rect', a, parent); }
+    if (kind === 'triangle') { a.points = [x, y - r - 1, x + r + 1, y + r, x - r - 1, y + r].join(' '); return el('polygon', a, parent); }
+    if (kind === 'diamond') { a.points = [x, y - r - 1, x + r + 1, y, x, y + r + 1, x - r - 1, y].join(' '); return el('polygon', a, parent); }
+    a.cx = x; a.cy = y; a.r = r; return el('circle', a, parent);
+  }
+  function niceTicks(lo, hi) {
+    var t = [], k, m;
+    if (useLog) {
+      for (k = Math.floor(Math.log10(lo)); k <= Math.ceil(Math.log10(hi)); k++)
+        [1, 2, 5].forEach(function (m) { var v = m * Math.pow(10, k); if (v >= lo * 0.999 && v <= hi * 1.001) t.push(v); });
+      return t;
+    }
+    var step = Math.pow(10, Math.floor(Math.log10(hi / 5)));
+    [1, 2, 2.5, 5, 10].some(function (m) { if (hi / (step * m) <= 6) { step *= m; return true; } });
+    for (k = 0; k <= hi + 1e-9; k += step) t.push(+k.toFixed(6));
+    return t;
+  }
+  function fmt(v) { return v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2); }
+  function draw() {
+    var W = plot.clientWidth, H = plot.clientHeight;
+    if (!W || !H) return;
+    var vals = [];
+    runs.forEach(function (r, i) { if (!hidden[i]) r.points.forEach(function (p) { if (p[1] > 0) vals.push(p[1]); }); });
+    if (!vals.length) vals = [1];
+    var vmax = Math.max.apply(null, vals), vmin = Math.min.apply(null, vals), lo, hi;
+    if (useLog) {
+      lo = Math.pow(10, Math.floor(Math.log10(vmin) * 2) / 2); hi = Math.pow(10, Math.ceil(Math.log10(vmax) * 2) / 2);
+      if (hi <= lo) hi = lo * 10;
+    } else { lo = 0; hi = niceTicks(0, vmax * 1.08).slice(-1)[0] || 1; }
+    var ticks = niceTicks(lo, hi), left = 52, right = 16, top = 26, bottom = 34;
+    var xs = sizes.map(function (n) { return Math.log2(n); }), x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs);
+    function X(n) { return left + (x1 > x0 ? (Math.log2(n) - x0) / (x1 - x0) : 0.5) * (W - left - right); }
+    function Y(v) {
+      var f = useLog ? (Math.log10(Math.max(v, lo)) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo)) : v / hi;
+      return H - bottom - f * (H - top - bottom);
+    }
+    if (svg) svg.remove();
+    svg = el('svg', {width: W, height: H}, null);
+    plot.insertBefore(svg, tip);
+    ticks.forEach(function (v) {
+      el('line', {x1: left, x2: W - right, y1: Y(v), y2: Y(v), stroke: 'var(--line)', 'stroke-width': 1}, svg);
+      var t = el('text', {x: left - 8, y: Y(v) + 4, 'text-anchor': 'end', 'font-size': 11, fill: 'var(--muted)'}, svg);
+      t.textContent = fmt(v);
+    });
+    var lastX = -1e9;
+    sizes.forEach(function (n) {
+      var x = X(n);
+      el('line', {x1: x, x2: x, y1: H - bottom, y2: H - bottom + 4, stroke: 'var(--muted)'}, svg);
+      if (x - lastX < 34) return;
+      lastX = x;
+      var t = el('text', {x: x, y: H - bottom + 17, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--muted)'}, svg);
+      t.textContent = n;
+    });
+    var ax = el('text', {x: left, y: H - 4, 'font-size': 11, fill: 'var(--muted)'}, svg);
+    ax.textContent = 'read size (bytes, log scale)';
+    var ay = el('text', {x: 4, y: 12, 'font-size': 11, fill: 'var(--muted)'}, svg);
+    ay.textContent = 'KB/s' + (useLog ? ' (log scale)' : '');
+    var cross = el('line', {y1: top, y2: H - bottom, stroke: 'var(--muted)', 'stroke-dasharray': '3 3', visibility: 'hidden'}, svg);
+    var order = runs.map(function (r, i) { return i; }).filter(function (i) { return i !== focus; });
+    if (focus >= 0) order.push(focus);
+    order.forEach(function (i) {
+      var r = runs[i], c = 'var(--c' + r.slot + ')';
+      if (hidden[i] || !r.points.length) return;
+      var g = el('g', {opacity: focus >= 0 && focus !== i ? 0.18 : 1}, svg);
+      el('polyline', {fill: 'none', stroke: c, 'stroke-width': focus === i ? 3 : 2, 'stroke-dasharray': r.dash,
+        'stroke-linejoin': 'round', points: r.points.map(function (p) { return X(p[0]) + ',' + Y(p[1]); }).join(' ')}, g);
+      r.points.forEach(function (p) {
+        if (p[0] === r.def) el('circle', {cx: X(p[0]), cy: Y(p[1]), r: 8, fill: 'none', stroke: c, 'stroke-width': 1.5}, g);
+        marker(r.marker, X(p[0]), Y(p[1]), 4, c, 'var(--card)', g);
+      });
+    });
+    geom = {X: X, cross: cross, W: W};
+  }
+  function showTip(ev) {
+    if (!geom) return;
+    var box = plot.getBoundingClientRect(), mx = ev.clientX - box.left, my = ev.clientY - box.top, best = null, bd = 1e9;
+    sizes.forEach(function (n) { var d = Math.abs(geom.X(n) - mx); if (d < bd) { bd = d; best = n; } });
+    if (best === null || bd > 40) { hideTip(); return; }
+    geom.cross.setAttribute('x1', geom.X(best)); geom.cross.setAttribute('x2', geom.X(best));
+    geom.cross.setAttribute('visibility', 'visible');
+    var rows = [];
+    runs.forEach(function (r, i) {
+      if (hidden[i]) return;
+      var p = r.points.filter(function (q) { return q[0] === best; })[0];
+      if (p) rows.push({r: r, v: p[1], t: fmt(p[1]) + ' KB/s' + (best === r.def ? ' (shipped)' : '')});
+      else if (r.fails.indexOf(best) >= 0) rows.push({r: r, v: -1, t: 'failed'});
+    });
+    rows.sort(function (a, b) { return b.v - a.v; });
+    tip.textContent = '';
+    var h = document.createElement('b'); h.textContent = best + '-byte reads'; tip.appendChild(h);
+    if (!rows.length) { var n0 = document.createElement('div'); n0.textContent = 'no run read this size'; tip.appendChild(n0); }
+    rows.forEach(function (o) {
+      var d = document.createElement('div'), s = document.createElementNS(NS, 'svg');
+      s.setAttribute('width', 22); s.setAttribute('height', 10);
+      el('line', {x1: 0, y1: 5, x2: 22, y2: 5, stroke: 'var(--c' + o.r.slot + ')', 'stroke-width': 2, 'stroke-dasharray': o.r.dash}, s);
+      var a = document.createElement('span'); a.textContent = o.r.label + ' #' + o.r.id;
+      var v = document.createElement('span'); v.className = 'v'; v.textContent = o.t;
+      d.appendChild(s); d.appendChild(a); d.appendChild(v); tip.appendChild(d);
+    });
+    tip.style.display = 'block';
+    var tw = tip.offsetWidth, th = tip.offsetHeight, tx = mx + 14, ty = my + 14;
+    if (tx + tw > box.width) tx = Math.max(4, mx - tw - 14);
+    if (ty + th > box.height) ty = Math.max(4, box.height - th - 4);
+    tip.style.left = tx + 'px'; tip.style.top = ty + 'px';
+  }
+  function hideTip() { tip.style.display = 'none'; if (geom) geom.cross.setAttribute('visibility', 'hidden'); }
+  plot.addEventListener('mousemove', showTip);
+  plot.addEventListener('mouseleave', hideTip);
+  plot.addEventListener('touchstart', function (e) { showTip(e.touches[0]); }, {passive: true});
+  function setScale(log) { useLog = log; logBtn.textContent = log ? 'Linear scale' : 'Log scale'; draw(); }
+  logBtn.addEventListener('click', function () { setScale(!useLog); });
+  function setBig(on) {
+    root.classList.toggle('big', on); bigBtn.setAttribute('aria-pressed', on);
+    bigBtn.textContent = on ? 'Smaller' : 'Bigger'; draw();
+  }
+  bigBtn.addEventListener('click', function () { setBig(!root.classList.contains('big')); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && root.classList.contains('big')) setBig(false); });
+  Array.prototype.forEach.call(legend, function (b) {
+    var i = +b.getAttribute('data-i');
+    b.addEventListener('click', function () { hidden[i] = !hidden[i]; b.setAttribute('aria-pressed', !hidden[i]); draw(); });
+    b.addEventListener('mouseenter', function () { if (!hidden[i]) { focus = i; draw(); } });
+    b.addEventListener('mouseleave', function () { focus = -1; draw(); });
+  });
+  if (window.ResizeObserver) new ResizeObserver(function () { draw(); }).observe(plot);
+  else window.addEventListener('resize', draw);
+  setScale(useLog);
+})();
+"""
 
 
 def index_page(version="", runs=None):

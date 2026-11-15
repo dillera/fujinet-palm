@@ -104,6 +104,20 @@ class Testers(unittest.TestCase):
             self.assertIn("/h2h/report?who=bob%20jr", page)
             self.assertIn("/h2h/report?runs=Alice/nio-serial%3A7", page)
 
+    def test_sweep_chart_escapes_tester_names(self):
+        # Names come from anyone who sends a run: the chart's legend is HTML and its data sits in a script element.
+        run = {"key": "x", "id": "9", "stack": "nio-serial", "who": "</script><b>x</b>", "meta": {"def": "490"},
+               "order": ["sw64", "sw490"], "rows": {"sw64": {"reps": 1, "fails": 0, "bytes": 16384, "us_body": 8000000},
+                                                   "sw490": {"reps": 1, "fails": 1, "bytes": 16384, "us_body": 0}}}
+        page = h2h_server.sweep_chart([run], [64, 490])
+        self.assertNotIn("<b>x</b>", page)
+        self.assertNotIn("</script><b>", page)
+        self.assertIn("&lt;b&gt;x&lt;/b&gt;", page)
+        data = json.loads(page.split("id=sweep-data>")[1].split("</script>")[0].replace("<\\/", "</"))
+        self.assertEqual(data["runs"][0]["points"], [[64, 2.0]])
+        self.assertEqual(data["runs"][0]["fails"], [490])
+        self.assertEqual(data["runs"][0]["def"], 490)
+
     def test_tester_names_are_cleaned(self):
         self.assertEqual(h2h_server.tester({"w": "  Ann \t\n Lee  "}), "Ann Lee")
         self.assertEqual(h2h_server.tester({"w": "a,b"}), "a b")
@@ -191,6 +205,8 @@ class EndToEnd(unittest.TestCase):
         page = h2h_server.html_report(h2h_server.pick_runs(runs, run["id"]), log)
         self.assertIn("Read size sweep", page)
         self.assertIn("<svg", page)
+        self.assertIn("id=sweep-data", page)
+        self.assertIn("class=bigger", page)
 
     def test_flaky_link_notes_and_retries(self):
         # Every 7th ping and open fails: the run notes each, and Send's
