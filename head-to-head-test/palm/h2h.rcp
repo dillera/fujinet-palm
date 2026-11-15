@@ -1,0 +1,65 @@
+#include "h2h_rsc.h"
+
+VERSION ID 1 "0.1"
+
+ICONFAMILYEX
+BEGIN
+    BITMAP "icon.bmp" BPP 1
+END
+
+MENU ID MainMenu
+BEGIN
+    PULLDOWN "Options"
+    BEGIN
+        MENUITEM "Copy to RAM" ID MainCopyToRamCmd "C"
+        MENUITEM "Install NioLib" ID MainInstallNioLibCmd "N"
+    END
+END
+
+FORM ID MainForm AT (0 0 160 160)
+NOFRAME
+USABLE
+MENUID MainMenu
+BEGIN
+    TITLE "H2H"
+    LABEL "Target (h2h server or any page):" AUTOID AT (2 29)
+    FIELD ID MainTargetField AT (2 41 156 22) USABLE EDITABLE UNDERLINED MULTIPLELINES MAXCHARS 120
+    LABEL "Reps" AUTOID AT (2 66)
+    FIELD ID MainRepsField AT (26 66 14 12) USABLE EDITABLE UNDERLINED NUMERIC MAXCHARS 2
+    CHECKBOX "64K" ID MainBigCheck AT (48 65 AUTO AUTO)
+    CHECKBOX "Sweep" ID MainSweepCheck AT (90 65 AUTO AUTO)
+    LABEL "Name" AUTOID AT (2 82)
+    FIELD ID MainNameField AT (30 82 128 12) USABLE EDITABLE UNDERLINED SINGLELINE MAXCHARS 23
+    BUTTON "Run" ID MainRunButton AT (1 147 34 12)
+    BUTTON "Ping" ID MainPingButton AT (39 147 34 12)
+    BUTTON "Results" ID MainResultsButton AT (77 147 42 12)
+    GRAFFITISTATEINDICATOR AT (148 149)
+END
+
+FORM ID ResultsForm AT (0 0 160 160)
+NOFRAME
+USABLE
+BEGIN
+    TITLE "Results"
+    FIELD ID ResultsField AT (1 16 150 128) USABLE NONEDITABLE MULTIPLELINES HASSCROLLBAR MAXCHARS 12000
+    SCROLLBAR ID ResultsScroll AT (152 16 7 128) VALUE 0 MIN 0 MAX 0 PAGESIZE 10
+    BUTTON "Done" ID ResultsDoneButton AT (1 147 34 12)
+    BUTTON "Send" ID ResultsSendButton AT (39 147 34 12)
+    BUTTON "Memo" ID ResultsMemoButton AT (77 147 34 12)
+END
+
+ALERT ID RomIncompatibleAlert
+ERROR
+BEGIN
+    TITLE "H2H"
+    MESSAGE "This app needs Palm OS 3.1 or later."
+    BUTTONS "OK"
+END
+
+ALERT ID InfoAlert
+INFORMATION
+BEGIN
+    TITLE "H2H"
+    MESSAGE "^1^2^3"
+    BUTTONS "OK"
+END
