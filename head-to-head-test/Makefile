@@ -14,9 +14,13 @@
 # For a run against make server on this Mac instead:
 #   make H2H_TARGET=http://$(H2H_HOST):8080/h2h
 IMAGE    ?= palmdev
-REPOS    ?= $(abspath ../nio/fujinet-nio-workspace/repos)
-CLASSIC  ?= $(abspath ../classic/fujinet-palm)
-PALMSYNC ?= $(abspath ../shared/palm-sync)
+# FUJIPALM is the folder holding the checkouts: this one is fujinet-palm's nio
+# branch at $(FUJIPALM)/nio/fujinet-palm, beside the fujinet-nio workspace;
+# the classic branch is at $(FUJIPALM)/classic/fujinet-palm.
+FUJIPALM ?= $(abspath ../../..)
+REPOS    ?= $(FUJIPALM)/nio/fujinet-nio-workspace/repos
+CLASSIC  ?= $(FUJIPALM)/classic/fujinet-palm
+PALMSYNC ?= $(FUJIPALM)/shared/palm-sync
 PORT     ?= 8080
 FUJINET  ?= 192.168.1.252
 H2H_HOST ?= $(shell ipconfig getifaddr en1 2>/dev/null || ipconfig getifaddr en0 2>/dev/null || echo 192.168.1.2)
@@ -77,7 +81,7 @@ install-visor: $(PRCS)
 #     $(abspath palm/build/H2H_NL.prc) $(abspath build/NioLib-rom.prc)"
 # (Every H2H app has Install NioLib, but SB NIO, H2H SB and NioLib together
 # come to just over 64 KB.)
-SBNIO ?= $(abspath ../../springboard-nio)
+SBNIO ?= $(abspath $(FUJIPALM)/../springboard-nio)
 SB_ROM_APPS ?= $(SBNIO)/palm/build/sbnio.prc $(abspath palm/build/H2H_SB.prc) \
                $(abspath palm/build/H2H_NL.prc)
 

@@ -11,6 +11,14 @@ server and reports the same numbers, so the stacks can be compared line by line:
 | **H2H SB** | `ANHB` | Visor (Prism) | Springboard module, CS1 bus | RP2350 + **fujinet-nio** on this Mac |
 | **H2H NL** | `ANHN` | Visor (Prism) | the same, through the installed **NioLib** | RP2350 + **fujinet-nio** on this Mac |
 
+NIO Config's H2H page (nio-config, built with `H2H_DIR=` this directory's `palm/`) runs the same suite through
+NioLib's saved transport on a colour Palm OS 5 screen: `niolib-network` runs come from NioLib's Network transport,
+the NIO on the Palm itself.
+
+This directory is part of fujinet-palm's `nio` branch. The Makefile finds its neighbours from `FUJIPALM` (the folder
+holding the checkouts, three levels up): the fujinet-nio workspace, fujinet-palm's `classic` branch checkout (FN H2H's
+FujiBus code) and palm-sync.
+
 The two serial apps separate *firmware* (same Palm, same cable, classic or NIO).
 The two NIO apps separate *link* (same NIO, serial or Springboard).
 H2H SB and H2H NL separate *library*: SB links fujinet-nio-lib's static
@@ -76,7 +84,7 @@ download; **64K** and **Sweep** add the long tests.
 - **Palm IIIc + classic firmware**: the IIIc in its cradle, null modem to the
   FN-RS232 running `palm-demo-fozz` (192.168.1.252). Run **FN H2H**.
 - **Palm IIIc + NIO**: either flash the FN-RS232 with NIO
-  (`fujibus-gpio-rs232-cdc-log-s3-wroom-1-n16r8`, see `../fujinet-nio-palm-install.pdf`),
+  (`fujibus-gpio-rs232-cdc-log-s3-wroom-1-n16r8`, see `fujinet-nio-palm-install.pdf` in the FujiPalm folder),
   or move the cradle cable to this Mac's USB serial adapter and run NIO's
   `fujibus-rs232` POSIX build on it. Run **H2H**. Note which in your notes:
   the report shows NIO's version and build profile, which tells them apart.
@@ -193,7 +201,7 @@ What to look for:
 ## What these builds change, and why
 
 So the sweep can try reads past the shipped size, the NIO library is built
-here (from `../nio/fujinet-nio-workspace/repos/fujinet-nio-lib`, into
+here (from `$(REPOS)/fujinet-nio-lib`, into
 `palm/build/`) with bigger packet buffers: 4096 bytes on serial (shipped 512)
 and 8192 on the Springboard (shipped 1024, the module's limit). The main
 download tests still read the shipped size, so they match the FI apps; only
