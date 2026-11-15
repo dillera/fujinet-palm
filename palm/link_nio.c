@@ -126,6 +126,14 @@ void link_stop(void)
 Err link_ping(void)
 {
     FN_TIME_T t;
+#ifdef H2H_HOST_STACK
+    /* NioLib's Network transport is a NIO on the Palm, with no clock device:
+     * its smallest round trip is the Fuji device's GetInfo. */
+    if (StrCompare(link_stack(), "niolib-network") == 0) {
+        fn_fuji_info_t info;
+        return Check("ping", fn_fuji_get_info(&info));
+    }
+#endif
     return Check("ping", fn_clock_get(&t));
 }
 
