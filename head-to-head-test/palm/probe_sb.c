@@ -10,10 +10,12 @@
  *   recv  reading the reply words back and checking them
  * The bus accesses are the library's own macros (fn_palmos_internal.h), the
  * constants, the retry logic and the stable register reads are the library's
- * (2733ba1 plus read_stable, which reads RESP_SEQ, RESULT, RESP_LEN and
- * RESP_CHECK until two reads agree, and read_reply_careful, which reads every
- * reply word that way on the passes after a failed check). Keep it in step if
- * that file changes.
+ * (fujinet-nio-lib 70795a5): read_stable reads RESP_SEQ, RESULT, RESP_LEN and
+ * RESP_CHECK until two reads agree, and read_reply_careful reads every reply
+ * word that way on the passes after a failed check. A word that never
+ * settles is not used: it ends that pass at the reply, and a RESULT that
+ * never settles ends the exchange as a bad read, never sending again. Keep it
+ * in step if that file changes.
  *
  * It also looks at what it lets through, without changing what the library
  * gets. A reply that passed the link's check word but is not a whole FujiBus
@@ -112,23 +114,28 @@ static const Char *PacketFault(const uint8_t *req, const uint8_t *resp, uint16_t
 
 static uint8_t ReadReply(uint8_t *resp, uint16_t cap, uint16_t *resp_len, uint16_t *got, uint16_t *want);
 
-/* The library's read_stable, noting when the reads disagreed. */
-static uint16_t ReadStable(uint16_t offset, const Char *name)
+/* The library's read_stable, noting when the reads disagreed: 1 with the
+ * word in *value once two reads agree, 0 if they never do. */
+static uint8_t ReadStable(uint16_t offset, const Char *name, uint16_t *value)
 {
     uint16_t a = FN_PALMOS_RD(offset), b, tries;
     Char line[H2H_NOTE_LEN];
 
     for (tries = 0; tries < STABLE_TRIES; tries++) {
         b = FN_PALMOS_RD(offset);
-        if (b == a)
-            break;
+        if (b == a) {
+            *value = a;
+            return 1;
+        }
         if (!tries) {
             StrPrintF(line, "#%u %s read %u, then %u", (UInt16)_fn_palmos_seq, name, a, b);
             Note(line);
         }
         a = b;
     }
-    return a;
+    StrPrintF(line, "#%u %s never settled", (UInt16)_fn_palmos_seq, name);
+    Note(line);
+    return 0;
 }
 
 /* A reply that passed its check word but does not parse: note it, read it
@@ -194,10 +201,12 @@ static void SendRequest(const uint8_t *req, uint16_t len)
 static uint8_t ReadReply(uint8_t *resp, uint16_t cap, uint16_t *resp_len, uint16_t *got, uint16_t *want_out)
 {
     fn_palmos_port_t port = FN_PALMOS_PORT(_fn_palmos_cs1 + SBN_R_RESP);
-    uint16_t n = ReadStable(SBN_R_RESP_LEN, "len"), want = ReadStable(SBN_R_RESP_CHECK, "check");
-    uint16_t keep, pairs, words, w, check = 0;
+    uint16_t n, want, keep, pairs, words, w, check = 0;
 
     *got = 0;
+    *want_out = 0;
+    if (!ReadStable(SBN_R_RESP_LEN, "len", &n) || !ReadStable(SBN_R_RESP_CHECK, "check", &want))
+        return 0;
     *want_out = want;
     if (n > SBN_RESP_MAX)
         return 0;
@@ -229,34 +238,43 @@ static uint8_t ReadReply(uint8_t *resp, uint16_t cap, uint16_t *resp_len, uint16
     return check == want;
 }
 
-/* One reply word, read until two reads agree; counts the words that did not
- * agree at first. */
-static uint16_t WordStable(uint16_t offset, uint16_t *misreads)
+/* One reply word, read until two reads agree: 1 with the word in *value, or
+ * 0 (noted) if they never do. Counts the words that did not agree at first. */
+static uint8_t WordStable(uint16_t offset, uint16_t *misreads, uint16_t *value)
 {
     uint16_t a = FN_PALMOS_RD(offset), b, tries;
+    Char line[H2H_NOTE_LEN];
 
     for (tries = 0; tries < STABLE_TRIES; tries++) {
         b = FN_PALMOS_RD(offset);
-        if (b == a)
-            break;
+        if (b == a) {
+            *value = a;
+            return 1;
+        }
         if (!tries)
             (*misreads)++;
         a = b;
     }
-    return a;
+    StrPrintF(line, "#%u careful read: word %u never settled", (UInt16)_fn_palmos_seq,
+              (UInt16)((offset - SBN_R_RESP) >> 1));
+    Note(line);
+    return 0;
 }
 
 /* The library's read_reply_careful: ReadReply with every word read until two
- * reads agree, for the passes after a failed check. */
+ * reads agree, for the passes after a failed check. A word that never
+ * settles ends the pass. */
 static uint8_t ReadReplyCareful(uint8_t *resp, uint16_t cap, uint16_t *resp_len, uint16_t *got,
                                 uint16_t *want_out)
 {
     uint16_t offset = SBN_R_RESP, misreads = 0;
-    uint16_t n = ReadStable(SBN_R_RESP_LEN, "len"), want = ReadStable(SBN_R_RESP_CHECK, "check");
-    uint16_t keep, pairs, words, w, check = 0;
+    uint16_t n, want, keep, pairs, words, w, check = 0;
     Char line[H2H_NOTE_LEN];
 
     *got = 0;
+    *want_out = 0;
+    if (!ReadStable(SBN_R_RESP_LEN, "len", &n) || !ReadStable(SBN_R_RESP_CHECK, "check", &want))
+        return 0;
     *want_out = want;
     if (n > SBN_RESP_MAX)
         return 0;
@@ -265,7 +283,8 @@ static uint8_t ReadReplyCareful(uint8_t *resp, uint16_t cap, uint16_t *resp_len,
     pairs = keep >> 1;
     words = ((n + 1) >> 1) - pairs;
     while (pairs--) {
-        w = WordStable(offset, &misreads);
+        if (!WordStable(offset, &misreads, &w))
+            return 0;
         offset += 2;
         check = SBN_CHECK_STEP(check, w);
         resp[0] = (uint8_t)(w >> 8);
@@ -273,7 +292,8 @@ static uint8_t ReadReplyCareful(uint8_t *resp, uint16_t cap, uint16_t *resp_len,
         resp += 2;
     }
     if (words) {
-        w = WordStable(offset, &misreads);
+        if (!WordStable(offset, &misreads, &w))
+            return 0;
         offset += 2;
         check = SBN_CHECK_STEP(check, w);
         if (keep & 1)
@@ -281,7 +301,8 @@ static uint8_t ReadReplyCareful(uint8_t *resp, uint16_t cap, uint16_t *resp_len,
         words--;
     }
     while (words--) {
-        w = WordStable(offset, &misreads);
+        if (!WordStable(offset, &misreads, &w))
+            return 0;
         offset += 2;
         check = SBN_CHECK_STEP(check, w);
     }
@@ -346,7 +367,16 @@ uint16_t __wrap_fn_palmos_exchange(const uint8_t *req, uint16_t len, uint8_t *re
                 return FN_PALMOS_NO_ANSWER;
             }
         }
-        result = ReadStable(SBN_R_RESULT, "result");
+        /* Only a RESULT that settles can send the request again. */
+        if (!ReadStable(SBN_R_RESULT, "result", &result)) {
+            gLast.seq = _fn_palmos_seq;
+            gLast.result = FN_PALMOS_BAD_READ;
+            gLast.tries = tries + 1;
+            gLink.usWait += clk_us() - tw;
+            gLink.failures++;
+            gLink.usLink += clk_us() - t0;
+            return FN_PALMOS_BAD_READ;
+        }
         gLink.usWait += clk_us() - tw;
     }
     gLast.seq = _fn_palmos_seq;
