@@ -9,6 +9,9 @@
 
 #include "fujinet-nio.h"
 #include "h2h.h"
+#ifdef H2H_NIOLIB
+#include "NioLib.h"
+#endif
 
 #ifndef H2H_DEFAULT_CHUNK
 #error "H2H_DEFAULT_CHUNK: the read size the FI apps get from this transport"
@@ -40,14 +43,71 @@ static Boolean InModuleRom(void)
 }
 
 #ifdef H2H_NIOLIB
-/* The installed NioLib (in RAM) and its default Springboard transport. */
-const Char *link_stack(void) { return InModuleRom() ? "niolib-springboard" : "niolib-springboard-ram"; }
-const Char *link_title(void) { return InModuleRom() ? "NioLib SB, app in module" : "NioLib SB, app in RAM"; }
+/* The transport the installed NioLib is set to (nioTransport..., from its saved
+ * settings, as NIO Config shows them), read once; 0 if NioLib can't say. The
+ * library is loaded, opened and released the way libniolib-client.a does. */
+static UInt16 gTransport;
+static UInt32 gSerialBaud;
+
+static UInt16 NioTransport(void)
+{
+    UInt16 ref, flags = 0, remaining = 0;
+    Boolean loaded = false;
+    NioLibVersion version;
+    NioLibConfig config;
+
+    if (gTransport)
+        return gTransport;
+    if (SysLibFind(nioLibName, &ref) != errNone) {
+        if (SysLibLoad(nioLibType, nioLibCreator, &ref) != errNone)
+            return 0;
+        loaded = true;
+    }
+    version.size = sizeof(version);
+    if (NioLibGetVersion(ref, &version) == errNone && version.abiMajor == 1 &&
+        version.abiMinor >= 2 && NioLibOpen(ref) == errNone) {
+        MemSet(&config, sizeof(config), 0);
+        config.size = sizeof(config);
+        if (NioLibGetConfig(ref, &config, &flags) == errNone) {
+            gTransport = config.transport;
+            gSerialBaud = config.serialBaud;
+        }
+        if (NioLibClose(ref, &remaining) != errNone)
+            remaining = 1;
+    }
+    if (loaded && !remaining)
+        SysLibRemove(ref);
+    return gTransport;
+}
+
+/* Named by NioLib's transport, as NIO Config's H2H page names it, so a run
+ * through the cradle is not filed as a Springboard one. */
+const Char *link_stack(void)
+{
+    switch (NioTransport()) {
+    case nioTransportSerial: return "niolib-serial";
+    case nioTransportUSB: return "niolib-usb";
+    case nioTransportNetwork: return "niolib-network";
+    default: return InModuleRom() ? "niolib-springboard" : "niolib-springboard-ram";
+    }
+}
+
+const Char *link_title(void)
+{
+    switch (NioTransport()) {
+    case nioTransportSerial: return "NioLib serial";
+    case nioTransportUSB: return "NioLib USB";
+    case nioTransportNetwork: return "NioLib Network, NIO on the Palm";
+    default: return InModuleRom() ? "NioLib SB, app in module" : "NioLib SB, app in RAM";
+    }
+}
+
+UInt32 link_baud(void) { return NioTransport() == nioTransportSerial ? gSerialBaud : 0; }
 #else
 const Char *link_stack(void) { return InModuleRom() ? "nio-springboard" : "nio-springboard-ram"; }
 const Char *link_title(void) { return InModuleRom() ? "NIO SB, app in module" : "NIO SB, app in RAM"; }
-#endif
 UInt32 link_baud(void) { return 0; }
+#endif
 #else
 const Char *link_stack(void) { return "nio-serial"; }
 const Char *link_title(void) { return "NIO FujiBus, cradle"; }
@@ -126,7 +186,7 @@ void link_stop(void)
 Err link_ping(void)
 {
     FN_TIME_T t;
-#ifdef H2H_HOST_STACK
+#if defined(H2H_HOST_STACK) || defined(H2H_NIOLIB)
     /* NioLib's Network transport is a NIO on the Palm, with no clock device:
      * its smallest round trip is the Fuji device's GetInfo. */
     if (StrCompare(link_stack(), "niolib-network") == 0) {
