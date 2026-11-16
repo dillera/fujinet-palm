@@ -38,6 +38,9 @@ RUNNING A TEST
    your runs under, and use the same one in every app. Send needs a name.
 2. Leave Reps at 3, and 64K and Sweep ticked, for a full run. Tap Run.
    A full run takes several minutes; tap the screen to stop it early.
+   Besides downloads it follows redirects (redir1, redir3, keep302) and
+   sends uploads the server checks byte for byte (post1k, put1k, post16k,
+   post64k, echo4k, post307).
    Ping runs only the link test, with no internet involved.
 3. When it finishes, the results appear. Tap Send to upload them to the
    server, and Memo to save a copy in Memo Pad. Done goes back, and Results

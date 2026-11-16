@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <netdb.h>
 #include <sys/socket.h>
+#include <strings.h>
 #include <sys/time.h>
 #include <unistd.h>
 
@@ -136,25 +137,52 @@ static void Count(UInt32 t0, size_t out, size_t in)
     gLink.usLink += clk_us() - t0;
 }
 
-Err link_get_open(const Char *url)
+/* The request in hand, kept so that a redirect can make it again: method,
+ * flags, URL and every body byte written. H2H_HOST_BODY=length sends a body
+ * with its length at the commit (as NIO's curl build does); otherwise it goes
+ * out chunked as it is written (as NIO's ESP32 build does). */
+static UInt8 gMethod, gFlags;
+static char gUrl[512];
+static unsigned char *gBody;
+static size_t gBodyLen, gBodyCap;
+static Boolean gChunked;
+
+static Err SendAll(const void *p, size_t n)
 {
-    char host[128], port[8] = "80", req[512];
+    const char *c = p;
+    ssize_t k;
+
+    while (n) {
+        k = send(gSock, c, n, 0);
+        if (k <= 0)
+            return h2hErrHttp;
+        c += k;
+        n -= (size_t)k;
+    }
+    return errNone;
+}
+
+/* Connects to url's host and sends the request line and headers. body is the
+ * body's length, or -1 for none, -2 for chunked. */
+static Err Begin(UInt8 method, const char *url, long body)
+{
+    static const char *names[] = {"GET", "GET", "POST", "PUT"};
+    char hostport[128], host[128], port[8] = "80", req[768], len[48] = "";
     const char *p = url, *path;
     struct addrinfo hints, *ai;
     size_t n;
     UInt32 t0 = clk_us();
 
-    if (strncmp(p, "http://", 7) != 0)
+    if (strncmp(p, "http://", 7) != 0 || method > H2H_PUT)
         return h2hErrHttp;
-    if (Flaky("open"))
-        return (Err)(appErrorClass | 0x105);
     p += 7;
     path = strchr(p, '/');
     n = path ? (size_t)(path - p) : strlen(p);
     if (n >= sizeof(host))
         return h2hErrHttp;
-    memcpy(host, p, n);
-    host[n] = '\0';
+    memcpy(hostport, p, n);
+    hostport[n] = '\0';
+    memcpy(host, hostport, n + 1);
     if (strchr(host, ':')) {
         snprintf(port, sizeof(port), "%s", strchr(host, ':') + 1);
         *strchr(host, ':') = '\0';
@@ -169,32 +197,151 @@ Err link_get_open(const Char *url)
         return h2hErrHttp;
     }
     freeaddrinfo(ai);
-    n = (size_t)snprintf(req, sizeof(req), "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n",
-                         path ? path : "/", host);
-    if (send(gSock, req, n, 0) != (ssize_t)n)
-        return h2hErrHttp;
+    if (body >= 0)
+        snprintf(len, sizeof(len), "Content-Length: %ld\r\n", body);
+    else if (body == -2)
+        snprintf(len, sizeof(len), "Transfer-Encoding: chunked\r\n");
+    n = (size_t)snprintf(req, sizeof(req), "%s %s HTTP/1.1\r\nHost: %s\r\n%sConnection: close\r\n\r\n",
+                         names[method], path ? path : "/", hostport, len);
     gEof = false;
     Count(t0, n, 0);
-    return errNone;
+    return SendAll(req, n);
 }
 
-/* Reads the status line and headers a byte at a time, so the body is left. */
+Err link_open(UInt8 method, const Char *url, UInt8 flags)
+{
+    const char *mode = getenv("H2H_HOST_BODY");
+
+    if (Flaky("open"))
+        return (Err)(appErrorClass | 0x105);
+    gMethod = method;
+    gFlags = flags;
+    snprintf(gUrl, sizeof(gUrl), "%s", url);
+    gBodyLen = 0;
+    gChunked = (flags & H2H_BODY) && !(mode && strcmp(mode, "length") == 0);
+    if ((flags & H2H_BODY) && !gChunked)
+        return errNone;     /* it goes out at the commit, when its length is known */
+    return Begin(method, url, (flags & H2H_BODY) ? -2 : -1);
+}
+
+Err link_get_open(const Char *url)
+{
+    return link_open(H2H_GET, url, 0);
+}
+
+Err link_write(const UInt8 *buf, UInt16 len)
+{
+    char head[16];
+    UInt32 t0 = clk_us();
+    Err err = errNone;
+    int n;
+
+    if (gBodyLen + len > gBodyCap) {
+        gBodyCap = (gBodyLen + len) * 2;
+        if (!(gBody = realloc(gBody, gBodyCap)))
+            return h2hErrNoMemory;
+    }
+    memcpy(gBody + gBodyLen, buf, len);
+    gBodyLen += len;
+    if (gChunked && len) {
+        n = snprintf(head, sizeof(head), "%x\r\n", (unsigned)len);
+        if ((err = SendAll(head, (size_t)n)) == errNone && (err = SendAll(buf, len)) == errNone)
+            err = SendAll("\r\n", 2);
+        Count(t0, (size_t)n + len + 2, 0);
+    }
+    return err;
+}
+
+Err link_commit(void)
+{
+    UInt32 t0 = clk_us();
+    Err err;
+
+    if (gChunked) {
+        err = SendAll("0\r\n\r\n", 5);
+        Count(t0, 5, 0);
+        return err;
+    }
+    if ((err = Begin(gMethod, gUrl, (long)gBodyLen)) == errNone)
+        err = SendAll(gBody, gBodyLen);
+    Count(t0, gBodyLen, 0);
+    return err;
+}
+
+static Boolean IsRedirect(UInt16 s)
+{
+    return s == 301 || s == 302 || s == 303 || s == 307 || s == 308;
+}
+
+/* A header's value in head (any case), into out. */
+static Boolean Header(const char *head, const char *name, char *out, size_t size)
+{
+    const char *p = head;
+    size_t n = strlen(name), k;
+
+    while ((p = strchr(p, '\n')) != NULL) {
+        p++;
+        if (strncasecmp(p, name, n) == 0 && p[n] == ':') {
+            p += n + 1;
+            while (*p == ' ')
+                p++;
+            for (k = 0; p[k] && p[k] != '\r' && p[k] != '\n' && k + 1 < size; k++)
+                out[k] = p[k];
+            out[k] = '\0';
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Reads the status line and headers a byte at a time, so the body is left.
+ * Asked to follow, it makes the request again where a redirect points, as
+ * curl does: after a 303, or a 301 or 302 to a POST or PUT, as a GET; after a
+ * 307 or 308 as it was, body and all. H2H_HOST_NOFOLLOW=1 never follows, as
+ * NioLib's Network transport does not. */
 Err link_get_wait(UInt16 *httpStatus)
 {
-    char head[2048];
-    size_t n = 0;
-    UInt32 t0 = clk_us();
+    char head[2048], to[512], url[512];
+    const char *rest;
+    size_t n;
+    int hops = 0;
+    UInt32 t0;
+    Err err;
 
-    *httpStatus = 0;
-    while (n < sizeof(head) - 1 && recv(gSock, head + n, 1, 0) == 1) {
-        n++;
-        if (n >= 4 && memcmp(head + n - 4, "\r\n\r\n", 4) == 0)
+    for (;;) {
+        n = 0;
+        t0 = clk_us();
+        *httpStatus = 0;
+        while (n < sizeof(head) - 1 && recv(gSock, head + n, 1, 0) == 1) {
+            n++;
+            if (n >= 4 && memcmp(head + n - 4, "\r\n\r\n", 4) == 0)
+                break;
+        }
+        head[n] = '\0';
+        Count(t0, 0, n);
+        if (sscanf(head, "HTTP/%*s %hu", httpStatus) != 1)
+            return h2hErrHttp;
+        if (!(gFlags & H2H_FOLLOW) || getenv("H2H_HOST_NOFOLLOW") || !IsRedirect(*httpStatus) || hops++ == 10 ||
+            !Header(head, "Location", to, sizeof(to)))
             break;
+        if (to[0] == '/') {
+            rest = strchr(gUrl + 7, '/');
+            snprintf(url, sizeof(url), "%.*s%s", (int)(rest ? (size_t)(rest - gUrl) : strlen(gUrl)), gUrl, to);
+        } else {
+            snprintf(url, sizeof(url), "%s", to);
+        }
+        snprintf(gUrl, sizeof(gUrl), "%s", url);
+        link_stop();
+        if (*httpStatus == 303 || (*httpStatus < 303 && gMethod != H2H_GET)) {
+            gMethod = H2H_GET;
+            gBodyLen = 0;
+        }
+        err = Begin(gMethod, gUrl, gMethod == H2H_GET ? -1 : (long)gBodyLen);
+        if (err == errNone && gMethod != H2H_GET)
+            err = SendAll(gBody, gBodyLen);
+        if (err != errNone)
+            return err;
     }
-    head[n] = '\0';
-    Count(t0, 0, n);
-    if (sscanf(head, "HTTP/%*s %hu", httpStatus) != 1)
-        return h2hErrHttp;
     return *httpStatus >= 400 ? h2hErrHttp : errNone;
 }
 
@@ -231,6 +378,10 @@ const Char *link_err_text(Err err)
     case h2hErrVerify: return "bad data";
     case h2hErrShort: return "short body";
     case h2hErrTimeout: return "timed out";
+    case h2hErrNoFollow: return "not followed";
+    case h2hErrFollowed: return "followed unasked";
+    case h2hErrNoTest: return "not on server";
+    case h2hErrBadUpload: return "server: bad upload";
     }
     return "error";
 }

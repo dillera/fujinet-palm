@@ -329,6 +329,27 @@ Err link_get_open(const Char *url)
                 OPEN_WAIT_TICKS);
 }
 
+/* The redirect and upload tests: only a plain GET here (classic N1: follows
+ * redirects as it likes, and its POST is another mode, not this test's). */
+Err link_open(UInt8 method, const Char *url, UInt8 flags)
+{
+    if (method != H2H_GET || flags)
+        return h2hErrNoStack;
+    return link_get_open(url);
+}
+
+Err link_write(const UInt8 *buf, UInt16 len)
+{
+    (void)buf;
+    (void)len;
+    return h2hErrNoStack;
+}
+
+Err link_commit(void)
+{
+    return h2hErrNoStack;
+}
+
 /* The first STATUS is when FujiNet makes the request; sent at most twice. */
 Err link_get_wait(UInt16 *httpStatus)
 {

@@ -68,7 +68,7 @@ user name); Send needs one. Every upload carries it (`w=`), and the server
 keeps each tester's runs apart: a run's key is `name/stack:id`. The report
 shows each tester's latest run of each stack (`?who=a,b` keeps those
 testers), and the server's front page lists every run by tester. A tap during a run stops it. **Reps** (default 3) repeats each
-download; **64K** and **Sweep** add the long tests.
+download and upload; **64K** and **Sweep** add the long tests (64K both ways).
 
 ### The three rigs
 
@@ -137,12 +137,40 @@ costs.
 | `ping` | 32 of the stack's smallest round trips with no network: classic `N1: STATUS` (nothing open), NIO `Clock.GetTime` |
 | `get16` | a GET of 16 bytes: the cost of one request (open, DNS/connect, headers, close) |
 | `get1k` … `get64k` | GETs of 1, 4, 16 and 64 KB, read with the size the shipped apps use (classic 256, NIO serial 490, Springboard 1002) |
+| `redir1` | `get1k`'s body behind one 302 with no body (`/h2h/redirect/302e/bytes/1024`), asked to follow (`FN_OPEN_FOLLOW_REDIR`) |
+| `redir3` | the same behind a 301, a 307 and a 308 (`301a-307-308a`), each with a short HTML page as most servers send, Locations absolute, path-only, absolute |
+| `keep302` | a 302 not asked to follow: it must come back as a 302 |
+| `post1k`, `put1k`, `post16k`, `post64k` | POST or PUT of that many pattern bytes to `/h2h/sink/N`, which checks every byte; opened with `FN_OPEN_BODY_UNKNOWN`, written with the read size, then committed with a write of nothing. `post64k` only with **64K** |
+| `echo4k` | 4 KB sent to `/h2h/echo` and read back, checked on both sides |
+| `post307` | `post1k` behind a 307, which has the body sent again |
 | `swNNN` | 16 KB read NNN bytes at a time, from 64 up to the most one exchange can carry |
 | `page` | the target itself, when it is not an h2h server |
 
 Bodies come from `/h2h/bytes/N`: byte *i* is `(i ^ (i >> 8)) & 0xFF`, so the
 Palm checks every byte as it arrives (a dropped or repeated piece fails the
-test). The check is timed and reported apart.
+test). The check is timed and reported apart. Uploads are the same pattern,
+and the server checks them: `ok N`, or a 422 with the first wrong byte (or
+too few, too many), which the Palm reports as *server: bad upload*.
+
+The redirect and upload tests name what went wrong: *not followed* (a
+redirect came back although following was asked), *followed unasked*, *not
+on server* (a 404: an h2h server from before these tests) and *server: bad
+upload*. A redirect's cost is the time over `get1k` (`post1k` for
+`post307`) per hop; an upload's rate is its body over the writes plus the
+wait for the reply, because a NIO that holds the body until the commit
+(curl) sends it during that wait. What to expect, from each NIO's code:
+
+| NIO | Redirects | Uploads (`FN_OPEN_BODY_UNKNOWN`) |
+|---|---|---|
+| POSIX (curl): the Visor's, or the emulator's | followed; a POST to a 301/302/303 becomes a GET, to a 307/308 is sent again | held until the commit, then sent with a Content-Length |
+| ESP32 (FN-RS232) | followed for GETs, but ESP-IDF hands NIO each redirect's own body, which it passes on (and since d2d22b2 the redirect's status sticks): `redir3` should fail, `redir1` (no bodies) pass; an upload's redirect is not followed (`post307`) | sent chunked as it is written |
+| NioLib Network (NIO on the Palm) | not followed: `redir1`, `redir3` and `post307` say so | held in a 1 KB buffer until the commit: over 1 KB fails (`post16k`, `post64k`, `echo4k`) |
+
+The server's log (`/h2h/log.csv`) has, for every request with a body, its
+size, how it came (`length` or `chunked`), how long it took to arrive and
+what the check found; for every redirect, where it pointed. The reports show
+it under each test as *server saw*: the hops a run followed, the encoding
+and the check.
 
 ## Reading the numbers
 
@@ -228,6 +256,15 @@ receive) with the same clock reads.
   the report.
 - **H2H SB** builds and links, but no emulator has a Springboard: its first
   run is on the Visor.
+- The redirect and upload tests (2026-11-15): `make test` runs them through
+  the suite on the Mac, its link sending bodies chunked (as the ESP32 NIO
+  does) and, with `H2H_HOST_BODY=length`, with a length (as curl does), and
+  following redirects as curl does; `H2H_HOST_NOFOLLOW=1` and a server
+  without the endpoints check *not followed* and *not on server*. In
+  CloudpilotEmu (Palm IIIc, OS 3.5), **H2H NL** through NioLib 11's serial
+  transport and NIO's POSIX build passed all nine, Send included: curl
+  followed the 302, the 301-307-308 chain and the POST's 307, kept the 302
+  it was not asked to follow, and sent every body with a length.
 
 On the Visor (2026-11-14):
 

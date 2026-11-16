@@ -5,6 +5,14 @@
  *   get16   an HTTP GET of 16 bytes: what one request costs
  *   get1k, get4k, get16k, get64k
  *           GETs of known bodies, read with the size the shipped apps use
+ *   redir1  get1k's body behind one 302 with no body, asked to follow
+ *   redir3  the same behind a 301, a 307 and a 308, each with a short page
+ *   keep302 the 302 not asked to follow, which must come back as it is
+ *   post1k, put1k, post16k, post64k
+ *           bodies of the same pattern sent to the server's sink, which checks
+ *           every byte (written with the read size, then committed)
+ *   echo4k  4 KB sent and read back
+ *   post307 post1k redirected by a 307, which sends the body again
  *   swNNN   16 KB read NNN bytes at a time, to find the fastest read size
  *   page    any web page (when the target is not an h2h server)
  *
@@ -21,13 +29,44 @@ Results gResults;
 #define SWEEP_REPS 2
 #define STALL_US 20000000UL     /* 20 s without a byte ends a download */
 #define UNKNOWN_SIZE 0xFFFFFFFFUL
+#define SINK_LINE 0xFFFFFFFEUL  /* a reply that must be the sink's "ok <size>" */
+#define SIZED(expect) ((expect) < SINK_LINE)
 #define URL_SIZE 256
+#define N_VALUES 25             /* a row's values in an upload (h2h_server.py FIELDS) */
 
 static const UInt32 kSizes[] = {16, 1024, 4096, 16384, 65536};
 static const Char *kSizeNames[] = {"get16", "get1k", "get4k", "get16k", "get64k"};
 static const UInt16 kSweep[] = {64, 128, 256, 512, 1024, 2048, 4096, 8192};
 #define N_SIZES (sizeof(kSizes) / sizeof(kSizes[0]))
 #define N_SWEEP (sizeof(kSweep) / sizeof(kSweep[0]))
+
+/* The redirect and upload tests: a request to a path under the target, with
+ * size pattern bytes as its body when it is an upload, and what must come
+ * back: status, and expect pattern bytes (or the sink's line, or anything).
+ * hops is how many redirects the path makes (server/h2h_server.py's
+ * /redirect: 302e is a 302 with no body, a an absolute Location). Not const:
+ * a const table would sit in the code, where its pointers are not fixed up. */
+typedef struct {
+    const Char *name;
+    const Char *path;
+    UInt32 size, expect;
+    UInt16 status;
+    UInt8 method, flags, hops;
+    Boolean big;              /* only with the 64K option */
+} Extra;
+
+static Extra kExtras[] = {
+    {"redir1", "redirect/302e/bytes/1024", 0, 1024, 200, H2H_GET, H2H_FOLLOW, 1, false},
+    {"redir3", "redirect/301a-307-308a/bytes/1024", 0, 1024, 200, H2H_GET, H2H_FOLLOW, 3, false},
+    {"keep302", "redirect/302/bytes/1024", 0, UNKNOWN_SIZE, 302, H2H_GET, 0, 1, false},
+    {"post1k", "sink/1024", 1024, SINK_LINE, 200, H2H_POST, H2H_BODY, 0, false},
+    {"put1k", "sink/1024", 1024, SINK_LINE, 200, H2H_PUT, H2H_BODY, 0, false},
+    {"post16k", "sink/16384", 16384, SINK_LINE, 200, H2H_POST, H2H_BODY, 0, false},
+    {"post64k", "sink/65536", 65536UL, SINK_LINE, 200, H2H_POST, H2H_BODY, 0, true},
+    {"echo4k", "echo", 4096, 4096, 200, H2H_POST, H2H_BODY, 0, false},
+    {"post307", "redirect/307/sink/1024", 1024, SINK_LINE, 200, H2H_POST, H2H_BODY | H2H_FOLLOW, 1, false},
+};
+#define N_EXTRAS (sizeof(kExtras) / sizeof(kExtras[0]))
 
 static UInt8 *gBuf;
 static UInt16 gBufSize;
@@ -156,11 +195,14 @@ static Boolean Stop(void)
 /* ---------------------------------------------------------------- one download */
 
 typedef struct {
-    UInt32 usOpen, usReady, usFirst, usBody, usClose, usTotal, usVerify;
-    UInt32 bytes, reads, empty;
+    UInt32 usOpen, usWrite, usReady, usFirst, usBody, usClose, usTotal, usVerify;
+    UInt32 bytes, reads, empty, writes;
     LinkCounters link;
     UInt16 http;
 } Download;
+
+/* The start of a reply read with no size check: the sink's line. */
+static Char gReply[24];
 
 /* Byte i of a body is (i ^ (i >> 8)) & 0xFF: within each 256-byte block the
  * high byte is fixed, so the check runs on bytes, with no 32-bit shifts. */
@@ -184,28 +226,104 @@ static Boolean Check(const UInt8 *p, UInt32 pos, UInt16 n)
     return true;
 }
 
-static Err Get(const Char *url, UInt32 expect, UInt16 chunk, Download *d)
+/* The pattern's bytes from pos on, as Check reads them. */
+static void Fill(UInt8 *p, UInt32 pos, UInt16 n)
+{
+    UInt8 lo = (UInt8)pos, hi = (UInt8)(pos >> 8);
+    UInt16 run;
+
+    while (n) {
+        run = 256 - lo;
+        if (run > n)
+            run = n;
+        n -= run;
+        while (run--) {
+            *p++ = (UInt8)(lo ^ hi);
+            lo++;
+        }
+        hi++;
+    }
+}
+
+/* What a reply's status says, for a test that wants status want: 0 if it is
+ * that (or the stack does not say, and the body must tell), else why not. */
+static Err Status(UInt16 http, UInt16 want, UInt8 flags)
+{
+    if (http == want || (http == 0 && want == 200))
+        return errNone;
+    if (http == 404)
+        return h2hErrNoTest;
+    if (http == 422)
+        return h2hErrBadUpload;
+    if (http >= 300 && http < 400 && (flags & H2H_FOLLOW))
+        return h2hErrNoFollow;
+    if (http >= 200 && http < 300 && want >= 300 && want < 400)
+        return h2hErrFollowed;
+    return h2hErrHttp;
+}
+
+/* Whether the reply was the sink's "ok <size>". */
+static Boolean SinkOk(UInt32 size)
+{
+    const Char *p = gReply + 3;
+    UInt32 v = 0;
+
+    if (StrNCompare(gReply, "ok ", 3) != 0 || *p < '0' || *p > '9')
+        return false;
+    while (*p >= '0' && *p <= '9')
+        v = v * 10 + (UInt32)(*p++ - '0');
+    return v == size;
+}
+
+/* One request: open it (a plain GET as link_get_open), send size pattern
+ * bytes chunk at a time and commit when it has a body, then wait for the reply
+ * (whose status must be want, when want is given), read it to the end and
+ * close. expect is the body that must come back: that many pattern bytes,
+ * checked as they arrive, or SINK_LINE or UNKNOWN_SIZE (unchecked). */
+static Err Request(UInt8 method, const Char *url, UInt8 flags, UInt32 size, UInt32 expect, UInt16 chunk,
+                   UInt16 want, Download *d)
 {
     static Char full[URL_SIZE];
-    UInt32 t0, t1, t2, t3, now, last;
-    UInt16 got, iter = 0;
+    UInt32 t0, t1, t2, t3, t4, now, last, pos = 0;
+    UInt16 got, n, iter = 0;
     Boolean eof = false, first = true;
     Err err, closeErr;
 
     MemSet(d, sizeof(*d), 0);
+    gReply[0] = '\0';
     link_url(url, full, sizeof(full));
     if (chunk > gBufSize)
         chunk = gBufSize;
     Snap();
     t0 = clk_us();
-    err = link_get_open(full);
+    err = method == H2H_GET && !flags ? link_get_open(full) : link_open(method, full, flags);
     t1 = clk_us();
     d->usOpen = t1 - t0;
+    while (err == errNone && (flags & H2H_BODY) && pos < size) {
+        n = size - pos > chunk ? chunk : (UInt16)(size - pos);
+        Fill(gBuf, pos, n);
+        err = link_write(gBuf, n);
+        pos += n;
+        d->writes++;
+        if ((++iter & 15) == 0) {
+            EvtResetAutoOffTimer();
+            if (Stop())
+                err = h2hErrCancelled;
+        }
+    }
+    if (err == errNone && (flags & H2H_BODY)) {
+        err = link_commit();
+        d->writes++;
+    }
+    t2 = clk_us();
+    d->usWrite = t2 - t1;
     if (err == errNone)
         err = link_get_wait(&d->http);
-    t2 = clk_us();
-    d->usReady = t2 - t1;
-    last = t2;
+    if (want && (err == errNone || (err == h2hErrHttp && d->http >= 400)))
+        err = Status(d->http, want, flags);
+    t3 = clk_us();
+    d->usReady = t3 - t2;
+    last = t3;
     while (err == errNone && !eof) {
         err = link_get_read(gBuf, chunk, &got, &eof);
         if (err != errNone)
@@ -216,14 +334,20 @@ static Err Get(const Char *url, UInt32 expect, UInt16 chunk, Download *d)
                 d->usFirst = now - t0;
                 first = false;
             }
-            if (expect != UNKNOWN_SIZE) {
+            if (SIZED(expect)) {
                 if (!Check(gBuf, d->bytes, got))
                     err = h2hErrVerify;
                 d->usVerify += clk_us() - now;
+            } else if (d->bytes < sizeof(gReply) - 1) {
+                n = (UInt16)(sizeof(gReply) - 1 - d->bytes);
+                if (n > got)
+                    n = got;
+                MemMove(gReply + d->bytes, gBuf, n);
+                gReply[d->bytes + n] = '\0';
             }
             d->bytes += got;
             d->reads++;
-            if (expect != UNKNOWN_SIZE && d->bytes > expect)
+            if (SIZED(expect) && d->bytes > expect)
                 err = h2hErrVerify;
             last = clk_us();
         } else if (!eof) {
@@ -237,19 +361,39 @@ static Err Get(const Char *url, UInt32 expect, UInt16 chunk, Download *d)
                 err = h2hErrCancelled;
         }
     }
-    t3 = clk_us();
-    d->usBody = t3 - t2;
+    t4 = clk_us();
+    d->usBody = t4 - t3;
     closeErr = link_get_close();
-    d->usClose = clk_us() - t3;
+    d->usClose = clk_us() - t4;
     d->usTotal = clk_us() - t0;
     if (first)
         d->usFirst = d->usTotal;
     Since(&d->link);
-    if (err == errNone && expect != UNKNOWN_SIZE && d->bytes != expect)
+    if (err == errNone && SIZED(expect) && d->bytes != expect)
         err = h2hErrShort;
+    if (err == errNone && expect == SINK_LINE && !SinkOk(size))
+        err = h2hErrVerify;
     if (err == errNone)
         err = closeErr;
     return err;
+}
+
+static Err Get(const Char *url, UInt32 expect, UInt16 chunk, Download *d)
+{
+    return Request(H2H_GET, url, 0, 0, expect, chunk, 0, d);
+}
+
+/* A failure's name: the suite's own, then the link's. */
+const Char *suite_err_text(Err err)
+{
+    switch (err) {
+    case h2hErrNoFollow: return "not followed";
+    case h2hErrFollowed: return "followed unasked";
+    case h2hErrNoTest: return "not on server";
+    case h2hErrNoStack: return "not in this stack";
+    case h2hErrBadUpload: return "server: bad upload";
+    }
+    return link_err_text(err);
 }
 
 /* ---------------------------------------------------------------- tests */
@@ -286,8 +430,33 @@ static void Finish(Row *row, UInt16 good)
 #define AVG(f) row->f = Div(row->f, good)
     AVG(usTotal); AVG(usOpen); AVG(usReady); AVG(usFirst); AVG(usBody); AVG(usClose);
     AVG(usVerify); AVG(exchanges); AVG(empty); AVG(reads); AVG(bytesOut); AVG(bytesIn);
-    AVG(usSend); AVG(usWait); AVG(usRecv); AVG(bytes);
+    AVG(usSend); AVG(usWait); AVG(usRecv); AVG(bytes); AVG(usWrite); AVG(writes);
 #undef AVG
+}
+
+/* A good repetition's numbers into its row (Finish averages them). */
+static void Add(Row *row, const Download *d, UInt32 bytes)
+{
+    row->bytes += bytes;
+    row->usTotal += d->usTotal;
+    if (d->usTotal < row->usMin) row->usMin = d->usTotal;
+    if (d->usTotal > row->usMax) row->usMax = d->usTotal;
+    row->usOpen += d->usOpen;
+    row->usWrite += d->usWrite;
+    row->writes += d->writes;
+    row->usReady += d->usReady;
+    row->usFirst += d->usFirst;
+    row->usBody += d->usBody;
+    row->usClose += d->usClose;
+    row->usVerify += d->usVerify;
+    row->exchanges += d->link.exchanges;
+    row->empty += d->empty;
+    row->reads += d->reads;
+    row->bytesOut += d->link.bytesOut;
+    row->bytesIn += d->link.bytesIn;
+    row->usSend += d->link.usSend;
+    row->usWait += d->link.usWait;
+    row->usRecv += d->link.usRecv;
 }
 
 static void RunPing(void)
@@ -379,36 +548,68 @@ static void RunGet(const Char *name, UInt32 size, UInt16 chunk, UInt16 reps)
         if (err != errNone) {
             row->fails++;
             row->lastErr = err;
-            Line(name, "failed:", link_err_text(err));
+            Line(name, "failed:", suite_err_text(err));
             if (err == h2hErrCancelled)
                 break;
             continue;
         }
         good++;
-        row->bytes += d.bytes;
-        row->usTotal += d.usTotal;
-        if (d.usTotal < row->usMin) row->usMin = d.usTotal;
-        if (d.usTotal > row->usMax) row->usMax = d.usTotal;
-        row->usOpen += d.usOpen;
-        row->usReady += d.usReady;
-        row->usFirst += d.usFirst;
-        row->usBody += d.usBody;
-        row->usClose += d.usClose;
-        row->usVerify += d.usVerify;
-        row->exchanges += d.link.exchanges;
-        row->empty += d.empty;
-        row->reads += d.reads;
-        row->bytesOut += d.link.bytesOut;
-        row->bytesIn += d.link.bytesIn;
-        row->usSend += d.link.usSend;
-        row->usWait += d.link.usWait;
-        row->usRecv += d.link.usRecv;
+        Add(row, &d, d.bytes);
     }
     Finish(row, good);
     if (good) {
         FmtTime(a, row->usTotal);
         fmt_rate(b, row->bytes, row->usBody);
         Line(name, a, b);
+    }
+}
+
+/* An upload's rate: the body over the writes and the wait for the reply,
+ * which is when a NIO that holds the body until the commit (curl) sends it. */
+static void UpRate(Char *out, const Row *r)
+{
+    fmt_rate(out, r->bytes, r->usWrite + r->usReady);
+}
+
+static void RunExtra(const Extra *x, UInt16 reps)
+{
+    static Char url[URL_SIZE];
+    Row *row = NewRow(x->name);
+    Char a[16], b[16];
+    Download d;
+    UInt16 k, good = 0, chunk = link_default_chunk();
+    Err err;
+
+    if (!row)
+        return;
+    row->chunk = chunk;
+    for (k = 0; k < reps && !Stop(); k++) {
+        StrPrintF(url, "%s %u/%u", x->name, k + 1, reps);
+        ui_progress(url);
+        StrPrintF(url, "%s/%s?r=%u&t=%s&k=%u&s=%s", gSettings->target, x->path, gResults.runId, x->name, k,
+                  link_stack());
+        err = Request(x->method, url, x->flags, x->size, x->expect, chunk, x->status, &d);
+        row->reps++;
+        row->resends += d.link.resends;
+        if (err != errNone) {
+            row->fails++;
+            row->lastErr = err;
+            Line(x->name, "failed:", suite_err_text(err));
+            if (err == h2hErrCancelled)
+                break;
+            continue;
+        }
+        good++;
+        Add(row, &d, x->size ? x->size : d.bytes);
+    }
+    Finish(row, good);
+    if (good) {
+        FmtTime(a, row->usTotal);
+        if (x->size)
+            UpRate(b, row);
+        else
+            StrCopy(b, x->status == 200 ? "followed" : "kept");
+        Line(x->name, a, b);
     }
 }
 
@@ -528,6 +729,11 @@ void suite_run(const Settings *settings, Boolean pingOnly)
             continue;
         RunGet(kSizeNames[i], kSizes[i], link_default_chunk(), reps);
     }
+    for (i = 0; i < N_EXTRAS && !Stop(); i++) {
+        if (kExtras[i].big && !settings->big)
+            continue;
+        RunExtra(&kExtras[i], reps);
+    }
     if (settings->sweep) {
         n = SweepSizes(sizes);
         for (i = 0; i < n && !Stop(); i++) {
@@ -631,6 +837,69 @@ static void ReportWhere(Out *o, const Row *r)
     }
 }
 
+/* The redirect and upload tests: each one's time, with what a hop costs
+ * (against the same request with none) or the upload's rate, and where the
+ * biggest upload's time went. */
+static void ReportExtras(Out *o)
+{
+    Char line[64], a[16], b[16], c[16];
+    const Row *r, *base, *big = NULL;
+    const Extra *x;
+    UInt32 per;
+    UInt16 i;
+    Boolean head = false;
+
+    for (i = 0; i < N_EXTRAS; i++) {
+        x = &kExtras[i];
+        if ((r = FindRow(x->name)) == NULL)
+            continue;
+        if (!head) {
+            PutLine(o, "-- Redirects and uploads --");
+            head = true;
+        }
+        if (r->reps == r->fails) {
+            StrPrintF(line, "%s failed: %s", r->test, suite_err_text(r->lastErr));
+            PutLine(o, line);
+            continue;
+        }
+        FmtTime(a, r->usTotal);
+        base = x->hops ? FindRow(x->size ? "post1k" : "get1k") : NULL;
+        if (x->status != 200) {
+            StrPrintF(line, "%s %s, %u kept", r->test, a, x->status);
+        } else if (base && base->reps > base->fails) {
+            per = r->usTotal > base->usTotal ? r->usTotal - base->usTotal : base->usTotal - r->usTotal;
+            FmtTime(b, per / x->hops);
+            StrPrintF(line, "%s %s %s%s/hop", r->test, a, r->usTotal >= base->usTotal ? "+" : "-", b);
+        } else if (x->size && x->expect == x->size) {
+            UpRate(b, r);
+            fmt_rate(c, r->bytes, r->usBody);
+            StrPrintF(line, "%s %s up %s dn %s", r->test, a, b, c);
+        } else if (x->size) {
+            UpRate(b, r);
+            StrPrintF(line, "%s %s %s up", r->test, a, b);
+            if (!x->hops && (!big || r->bytes > big->bytes))
+                big = r;
+        } else {
+            StrPrintF(line, "%s %s", r->test, a);
+        }
+        PutLine(o, line);
+        if (r->fails) {
+            StrPrintF(line, " %u of %u failed: %s", r->fails, r->reps, suite_err_text(r->lastErr));
+            PutLine(o, line);
+        }
+    }
+    if (big) {
+        FmtTime(a, big->usOpen);
+        FmtTime(b, big->usWrite);
+        StrPrintF(line, " %s: open %s write %s", big->test, a, b);
+        PutLine(o, line);
+        FmtTime(a, big->usReady);
+        FmtTime(b, big->usBody);
+        StrPrintF(line, " wait %s reply %s, %lu writes", a, b, big->writes);
+        PutLine(o, line);
+    }
+}
+
 UInt16 suite_report(Char *buf, UInt16 size)
 {
     Out o;
@@ -709,7 +978,7 @@ UInt16 suite_report(Char *buf, UInt16 size)
         }
         if (r->reps == r->fails) {
             StrPrintF(line, "%s failed: %s", r->test + (r->test[0] == 'g' ? 3 : 0),
-                      link_err_text(r->lastErr));
+                      suite_err_text(r->lastErr));
             PutLine(&o, line);
             continue;
         }
@@ -732,6 +1001,7 @@ UInt16 suite_report(Char *buf, UInt16 size)
     }
     if (biggest)
         ReportWhere(&o, biggest);
+    ReportExtras(&o);
 
     for (i = 0; i < gResults.count; i++) {
         r = &gResults.rows[i];
@@ -754,7 +1024,7 @@ UInt16 suite_report(Char *buf, UInt16 size)
         StrPrintF(a, "%u", r->chunk);
         Pad(name, a, 5, false);
         if (r->reps == r->fails) {
-            StrPrintF(line, "%s failed: %s", name, link_err_text(r->lastErr));
+            StrPrintF(line, "%s failed: %s", name, suite_err_text(r->lastErr));
         } else {
             fmt_rate(b, r->bytes, r->usBody);
             c[0] = '\0';
@@ -824,7 +1094,7 @@ Err suite_upload(const Settings *settings, UInt16 *sent)
 {
     static Char url[URL_SIZE];
     Char num[12], fw[48], line[96];  /* the header's longest piece is 72 */
-    UInt32 v[23];
+    UInt32 v[N_VALUES];
     UInt16 i, j, start;
     const Row *r;
     Err err;
@@ -861,14 +1131,15 @@ Err suite_upload(const Settings *settings, UInt16 *sent)
         v[8] = r->usReady; v[9] = r->usFirst; v[10] = r->usBody; v[11] = r->usClose;
         v[12] = r->usVerify; v[13] = r->exchanges; v[14] = r->empty; v[15] = r->reads;
         v[16] = r->bytesOut; v[17] = r->bytesIn; v[18] = r->usSend; v[19] = r->usWait;
-        v[20] = r->usRecv; v[21] = r->resends; v[22] = (UInt16)r->lastErr;
+        v[20] = r->usRecv; v[21] = r->resends; v[22] = (UInt16)r->lastErr; v[23] = r->usWrite;
+        v[24] = r->writes;
         /* As many values per GET as fit the URL (classic N: takes 256). */
-        for (start = 0; start < 23 && err == errNone; start = j) {
+        for (start = 0; start < N_VALUES && err == errNone; start = j) {
             StrPrintF(url, "%s/r?id=%u&s=%s&w=", settings->target, gResults.runId, link_stack());
             UrlAppend(url, settings->name, sizeof(url));
             StrPrintF(line, "&t=%s&o=%u&v=", r->test, start);
             Append(url, line, sizeof(url));
-            for (j = start; j < 23; j++) {
+            for (j = start; j < N_VALUES; j++) {
                 StrPrintF(num, j > start ? ",%lu" : "%lu", v[j]);
                 if (j > start && StrLen(url) + StrLen(num) + 8 > 240)
                     break;

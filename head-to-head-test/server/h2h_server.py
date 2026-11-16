@@ -17,6 +17,22 @@ Under /h2h:
                 Palm can check every byte. Content-Length, then the connection
                 closes. The apps add ?r=<run>&t=<test>&k=<rep>&s=<stack>, which
                 only label the request log.
+  /redirect/HOPS/WHERE
+                a chain of redirects, one per dash-separated hop in HOPS, that
+                ends at /h2h/WHERE (bytes/N, sink/N or echo). A hop is a status
+                (301, 302, 303, 307 or 308) and any of: a (Location is absolute,
+                http://<Host>/h2h/..., not just the path), e (no body; a hop
+                otherwise sends a short HTML page, as most servers do). So
+                /redirect/301a-307-308a/bytes/1024 is three hops. Each keeps the
+                query. Any method: a POST's body is read and dropped (a 307 or
+                308 has the client send it again).
+  /sink/N       POST or PUT: the body must be bytes/N's N bytes. 200 "ok N"
+                when every byte is right, else 422 and what was wrong ("bad at
+                O: got 0xXX want 0xYY", "short: G of N", "long: G of N"). The
+                body may come with a Content-Length or chunked.
+  /echo         POST or PUT: the body sent back (up to 1 MB), checked against
+                the same pattern on the way in (the X-H2H-Check header says ok,
+                or what was wrong).
   /h?...        a run's header, sent by the app's Send button
   /r?...        one row of a run's results (o = index of the first value in v)
   /n?...        one diagnostic note of a run (i = its number, m = the text)
@@ -26,7 +42,9 @@ Under /h2h:
                 ?who=a,b keeps those testers, ?runs=k1,k2 picks runs by key
   /report.txt   the same as text
   /runs.json    everything stored
-  /log.csv      every request served: when, who, what, and how long it took here
+  /log.csv      every request served: when, who, what, and how long it took
+                here; for a body sent in, its size, how it came (length or
+                chunked), how long it took to arrive and what the check found
   /version      the server's version, as text
 
 Runs are kept in <data>/runs.json, the request log in <data>/requests.csv.
@@ -37,6 +55,7 @@ import datetime
 import html
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -46,6 +65,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, quote, urlsplit
 
 MAX_BYTES = 4 * 1024 * 1024
+ECHO_MAX = 1024 * 1024
+MAX_HOPS = 10
+REDIRECTS = {301: "Moved Permanently", 302: "Found", 303: "See Other", 307: "Temporary Redirect",
+             308: "Permanent Redirect"}
+HOP = re.compile(r"(30[12378])([ae]*)$")
+REDIRECT_TO = re.compile(r"(bytes/\d+|sink/\d+|echo)$")
 
 # Set in the copy make server-release writes (--stamp); empty in the checkout.
 VERSION = ""
@@ -83,12 +108,28 @@ def stamp(out, version):
     with open(out, "w") as f:
         f.write(src.replace(old, f"VERSION = {version!r}\n", 1))
 
-# The order the Palm sends a row's values in (suite.c, suite_upload).
+# The order the Palm sends a row's values in (suite.c, suite_upload). us_write and writes came later: an older
+# app sends none, an older server keeps none.
 FIELDS = [
     "reps", "fails", "chunk", "bytes", "us_total", "us_min", "us_max", "us_open",
     "us_ready", "us_first", "us_body", "us_close", "us_verify", "exchanges", "empty",
     "reads", "bytes_out", "bytes_in", "us_send", "us_wait", "us_recv", "resends", "last_err",
+    "us_write", "writes",
 ]
+
+# A row's last_err, as the app numbers it (palm/h2h.h): its own codes, then NIO's (fujinet-nio.h) above 0x8100.
+APP_ERRORS = {0x8040: "timed out", 0x8041: "stopped", 0x8042: "HTTP error", 0x8043: "bad data",
+              0x8044: "short body", 0x8045: "no memory", 0x8046: "redirect not followed",
+              0x8047: "redirect followed unasked", 0x8048: "not on this server", 0x8049: "not in this stack",
+              0x804A: "server: bad upload"}
+NIO_ERRORS = {1: "not found", 2: "invalid", 3: "busy", 4: "not ready", 5: "I/O error", 6: "timeout",
+              7: "internal error", 8: "unsupported", 0x10: "transport error", 0x11: "URL too long",
+              0x12: "no free handles", 0x13: "aborted"}
+
+# The redirect and upload tests (suite.c kExtras), in the order the reports show them, and the hops in each.
+REDIRECT_TESTS = ["redir1", "redir3", "keep302", "post307"]
+UPLOAD_TESTS = ["post1k", "put1k", "post16k", "post64k", "echo4k"]
+HOPS = {"redir1": 1, "redir3": 3, "keep302": 1, "post307": 1}
 HEADER_FIELDS = ["n", "clkns", "baud", "def", "max", "run", "fw", "dev"]
 
 STACKS = {
@@ -104,6 +145,9 @@ STACKS = {
 }
 
 _pattern_cache = {}
+# Byte i depends only on i's low 16 bits, so the pattern repeats every 64 KB.
+_PERIOD = bytes((i ^ (i >> 8)) & 0xFF for i in range(65536))
+_TWO_PERIODS = _PERIOD * 2
 
 
 def pattern(n):
@@ -111,8 +155,112 @@ def pattern(n):
     if n not in _pattern_cache:
         if len(_pattern_cache) > 32:
             _pattern_cache.clear()
-        _pattern_cache[n] = bytes((i ^ (i >> 8)) & 0xFF for i in range(n))
+        _pattern_cache[n] = (_PERIOD * (n // 65536 + 1))[:n]
     return _pattern_cache[n]
+
+
+def pattern_at(start, n):
+    """Bytes start to start + n - 1 of the pattern, for n up to 64 KB."""
+    s = start % 65536
+    return _TWO_PERIODS[s:s + n]
+
+
+class BodyCheck:
+    """A request body checked against the pattern as it arrives, piece by piece (each at most 64 KB); keep holds
+    on to the bytes too."""
+
+    def __init__(self, keep=False):
+        self.n = 0
+        self.bad = None     # (offset, got, want) of the first wrong byte
+        self.kept = bytearray() if keep else None
+
+    def feed(self, piece):
+        if self.bad is None:
+            want = pattern_at(self.n, len(piece))
+            if piece != want:
+                i = next(i for i in range(len(piece)) if piece[i] != want[i])
+                self.bad = (self.n + i, piece[i], want[i])
+        if self.kept is not None:
+            self.kept += piece
+        self.n += len(piece)
+
+    def verdict(self, expect=None):
+        """"ok", or what was wrong: the first wrong byte, or (for expect bytes) too few or too many."""
+        if self.bad and (expect is None or self.bad[0] < expect):
+            o, got, want = self.bad
+            return f"bad at {o}: got 0x{got:02x} want 0x{want:02x}"
+        if expect is not None and self.n != expect:
+            return f"{'short' if self.n < expect else 'long'}: {self.n} of {expect}"
+        return "ok"
+
+
+class BodyError(Exception):
+    """A request body that could not be read: the status to answer with, and why."""
+
+    def __init__(self, status, reason):
+        super().__init__(reason)
+        self.status = status
+
+
+def read_body(rfile, headers, limit, feed):
+    """Reads a request body and hands it to feed piece by piece. Returns its size and how it came: "length"
+    (Content-Length), "chunked", or "none" (neither, so no body). Raises BodyError for a body over limit bytes or
+    one that is cut short or badly framed."""
+    coding = headers.get("Transfer-Encoding", "").strip().lower()
+    if coding:
+        if coding != "chunked":
+            raise BodyError(501, f"transfer coding {coding!r}")
+        return _read_chunked(rfile, limit, feed), "chunked"
+    length = headers.get("Content-Length")
+    if length is None:
+        return 0, "none"
+    if not length.strip().isdigit():
+        raise BodyError(400, "bad Content-Length")
+    n = int(length)
+    if n > limit:
+        raise BodyError(413, f"body of {n} bytes, over {limit}")
+    got = 0
+    while got < n:
+        piece = rfile.read(min(n - got, 65536))
+        if not piece:
+            raise BodyError(400, f"body ended at {got} of {n}")
+        feed(piece)
+        got += len(piece)
+    return got, "length"
+
+
+def _read_chunked(rfile, limit, feed):
+    got = 0
+    while True:
+        line = rfile.readline(1026)
+        size = line.split(b";", 1)[0].strip()
+        if not line.endswith(b"\n") or not size or any(c not in b"0123456789abcdefABCDEF" for c in size):
+            raise BodyError(400, f"bad chunk size line at {got}")
+        size = int(size, 16)
+        if size == 0:
+            break
+        if got + size > limit:
+            raise BodyError(413, f"body over {limit} bytes")
+        while size:
+            piece = rfile.read(min(size, 65536))
+            if not piece:
+                raise BodyError(400, f"body ended inside a chunk at {got}")
+            feed(piece)
+            got += len(piece)
+            size -= len(piece)
+        if rfile.readline(3) not in (b"\r\n", b"\n"):
+            raise BodyError(400, f"chunk not followed by CRLF at {got}")
+    while rfile.readline(1026) not in (b"\r\n", b"\n", b""):    # trailer fields, unused
+        pass
+    return got
+
+
+def redirect_page(code, location):
+    """A redirect's body, as a typical web server sends one."""
+    title = f"{code} {REDIRECTS[code]}"
+    return (f"<html>\r\n<head><title>{title}</title></head>\r\n<body>\r\n<center><h1>{title}</h1></center>\r\n"
+            f"<p>The document has moved <a href=\"{html.escape(location)}\">here</a>.</p>\r\n</body>\r\n</html>\r\n"
+            ).encode()
 
 
 class Store:
@@ -128,6 +276,29 @@ class Store:
         if os.path.exists(self.runs_path):
             with open(self.runs_path) as f:
                 self.runs = json.load(f)
+        self._upgrade_log()
+
+    def _upgrade_log(self):
+        """A request log an older server wrote has fewer columns: it is rewritten once under the current header,
+        the new columns empty. One with columns this server does not know is moved aside instead."""
+        if not os.path.exists(self.log_path):
+            return
+        with open(self.log_path, newline="") as f:
+            rows = list(csv.reader(f))
+        if not rows or rows[0] == LOG_COLUMNS:
+            return
+        head = rows[0]
+        if not set(head) <= set(LOG_COLUMNS):
+            os.replace(self.log_path, self.log_path[:-4] + "-" + time.strftime("%Y%m%d-%H%M%S") + ".csv")
+            return
+        tmp = self.log_path + ".tmp"
+        with open(tmp, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(LOG_COLUMNS)
+            for r in rows[1:]:
+                old = dict(zip(head, r))
+                w.writerow([old.get(c, "") for c in LOG_COLUMNS])
+        os.replace(tmp, self.log_path)
 
     def _save(self):
         tmp = self.runs_path + ".tmp"
@@ -187,8 +358,10 @@ class Store:
                 w.writerow([entry.get(c, "") for c in LOG_COLUMNS])
 
 
+# bytes is the reply's body; bytes_in a request body's, encoding how it came (length, chunked or none), ms_recv how
+# long it took to arrive, result what the check found (or where a redirect pointed). The last six came later.
 LOG_COLUMNS = ["time", "client", "path", "stack", "run", "test", "rep", "bytes",
-               "ms_request", "ms_send", "status"]
+               "ms_request", "ms_send", "status", "method", "bytes_in", "encoding", "ms_recv", "result"]
 
 
 def now_iso():
@@ -211,6 +384,8 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "h2h/" + version
     protocol_version = "HTTP/1.1"
     store = None
+    # A client that sends or takes nothing for this long is dropped (a Palm's own stall limit is 20 s).
+    timeout = 120
 
     def version_string(self):
         return self.server_version
@@ -223,35 +398,147 @@ class Handler(BaseHTTPRequestHandler):
         if self.server.verbose:
             sys.stderr.write("%s %s\n" % (self.address_string(), fmt % args))
 
-    def _send(self, status, body, ctype="text/plain; charset=utf-8"):
+    def _entry(self, status, sent, info=None):
+        q = query(self.path)
+        entry = {
+            "time": now_iso(), "client": self.client_address[0], "path": urlsplit(self.path).path,
+            "stack": q.get("s", ""), "run": q.get("r", q.get("id", "")), "test": q.get("t", ""),
+            "rep": q.get("k", ""), "bytes": sent, "status": status, "method": self.command,
+        }
+        entry.update(info or {})
+        return entry
+
+    def _send(self, status, body, ctype="text/plain; charset=utf-8", headers=(), info=None):
+        """The reply, and its line in the request log (info adds a request body's columns)."""
         t_request = time.monotonic()
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for name, value in headers:
+            self.send_header(name, value)
         self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(body)
         self.wfile.flush()
         self.close_connection = True
         t_done = time.monotonic()
-        q = query(self.path)
-        self.store.log({
-            "time": now_iso(), "client": self.client_address[0], "path": urlsplit(self.path).path,
-            "stack": q.get("s", ""), "run": q.get("r", q.get("id", "")), "test": q.get("t", ""),
-            "rep": q.get("k", ""), "bytes": len(body),
-            "ms_request": round((t_request - self.t_accept) * 1000, 1),
-            "ms_send": round((t_done - t_request) * 1000, 1), "status": status,
-        })
+        self.store.log(dict(self._entry(status, len(body), info),
+                            ms_request=round((t_request - self.t_accept) * 1000, 1),
+                            ms_send=round((t_done - t_request) * 1000, 1)))
+
+    def _receive(self, limit, check):
+        """The request body into check (a BodyCheck). Returns the log's columns for it, and the error reply
+        (status, text) when it could not be read, or None. A client that went away is logged here, status 0,
+        and raises ConnectionError."""
+        t0 = time.monotonic()
+        try:
+            got, how = read_body(self.rfile, self.headers, limit, check.feed)
+            failed = None
+        except BodyError as e:
+            got, how, failed = check.n, "broken", (e.status, str(e))
+        except OSError as e:
+            self.close_connection = True
+            self.store.log(self._entry(0, 0, {"bytes_in": check.n, "ms_recv": round((time.monotonic() - t0) * 1000, 1),
+                                              "result": f"connection lost after {check.n} bytes ({type(e).__name__})"}))
+            raise ConnectionError from e
+        info = {"bytes_in": got, "encoding": how, "ms_recv": round((time.monotonic() - t0) * 1000, 1)}
+        return info, failed
+
+    def _drain(self):
+        """Reads and drops a request body, so that a reply sent without it still reaches the client."""
+        info, failed = self._receive(MAX_BYTES, BodyCheck())
+        if failed:
+            self.close_connection = True
+        return info
+
+    def _host(self):
+        """Where the client reached this server, for an absolute Location: its Host header when that is a plain
+        host[:port], else the address it connected to; with this server's port when the client left it out."""
+        host = self.headers.get("Host", "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9.-]+(:\d{1,5})?|\[[0-9A-Fa-f:.]+\](:\d{1,5})?", host):
+            host = self.connection.getsockname()[0]
+            host = f"[{host}]" if ":" in host else host
+        if not re.search(r":\d+$", host):
+            port = self.connection.getsockname()[1]
+            if port != 80:
+                host += f":{port}"
+        return host
+
+    def _redirect(self, rest):
+        """/redirect/HOPS/WHERE: the first hop's redirect, to the rest of the chain."""
+        spec, _, where = rest.partition("/")
+        hops = spec.split("-")
+        first = HOP.match(hops[0])
+        info = self._drain()
+        if len(hops) > MAX_HOPS or not REDIRECT_TO.match(where) or not all(HOP.match(h) for h in hops):
+            return self._send(400, b"bad redirect: /h2h/redirect/<hops>/<bytes/N, sink/N or echo>\n", info=info)
+        code, opts = int(first.group(1)), first.group(2)
+        to = "/h2h/" + (f"redirect/{'-'.join(hops[1:])}/" if len(hops) > 1 else "") + where
+        if urlsplit(self.path).query:
+            to += "?" + urlsplit(self.path).query
+        if "a" in opts:
+            to = f"http://{self._host()}{to}"
+        body = b"" if "e" in opts else redirect_page(code, to)
+        info["result"] = "-> " + to
+        return self._send(code, body, "text/html; charset=utf-8", [("Location", to)], info)
+
+    def _sink(self, size):
+        """/sink/N: the body must be the pattern's first N bytes."""
+        n = int(size) if size.isdigit() else -1
+        if not 0 <= n <= MAX_BYTES:
+            return self._send(400, b"size out of range\n", info=self._drain())
+        check = BodyCheck()
+        info, failed = self._receive(MAX_BYTES, check)
+        if failed:
+            return self._send(failed[0], f"{failed[1]}\n".encode(), info=dict(info, result=failed[1]))
+        verdict = check.verdict(n)
+        info["result"] = verdict
+        if verdict != "ok":
+            return self._send(422, f"{verdict}\n".encode(), info=info)
+        return self._send(200, f"ok {n}\n".encode(), info=info)
+
+    def _echo(self):
+        """/echo: the body back, checked on the way in."""
+        check = BodyCheck(keep=True)
+        info, failed = self._receive(ECHO_MAX, check)
+        if failed:
+            return self._send(failed[0], f"{failed[1]}\n".encode(), info=dict(info, result=failed[1]))
+        info["result"] = check.verdict()
+        return self._send(200, bytes(check.kept), "application/octet-stream",
+                          [("X-H2H-Check", info["result"]), ("X-Content-Type-Options", "nosniff")], info)
 
     def do_GET(self):
+        self._handle()
+
+    def do_POST(self):
+        self._handle()
+
+    def do_PUT(self):
+        self._handle()
+
+    def _handle(self):
+        try:
+            self._route()
+        except ConnectionError:
+            self.close_connection = True
+
+    def _route(self):
         parts = urlsplit(self.path)
         path = parts.path.rstrip("/")
         if not path.startswith("/h2h"):
-            return self._send(404, b"not found\n")
+            return self._send(404, b"not found\n", info=self._drain())
         path = path[len("/h2h"):]
         q = query(self.path)
         client = self.client_address[0]
+        if path.startswith("/redirect/"):
+            return self._redirect(path[len("/redirect/"):])
+        if path.startswith("/sink/") or path == "/echo":
+            if self.command == "GET":
+                return self._send(405, b"POST or PUT a body\n", headers=[("Allow", "POST, PUT")])
+            return self._sink(path[len("/sink/"):]) if path != "/echo" else self._echo()
+        if self.command != "GET":
+            return self._send(404, b"not found\n", info=self._drain())
         try:
             if path.startswith("/bytes/"):
                 n = int(path[len("/bytes/"):])
@@ -318,11 +605,16 @@ def read_log(path):
         return list(csv.DictReader(f))
 
 
+# The requests a test makes; the results the app sends later carry the same run and test, so they are left out.
+TEST_PATHS = ("/h2h/bytes/", "/h2h/redirect/", "/h2h/sink/", "/h2h/echo")
+
+
 def server_side(log, run):
     """Per test: the server's mean time to send the body (ms), from the log."""
     out = {}
     for e in log:
-        if e.get("stack") == run["stack"] and e.get("run") == run["id"] and e.get("test"):
+        if e.get("stack") == run["stack"] and e.get("run") == run["id"] and e.get("test") and \
+                e.get("path", "").startswith("/h2h/bytes/"):
             out.setdefault(e["test"], []).append(float(e["ms_send"] or 0))
     return {t: sum(v) / len(v) for t, v in out.items()}
 
@@ -401,6 +693,89 @@ def notes(run):
     """A run's diagnostic notes in order, and how many the Palm had in all."""
     kept = run.get("notes", {})
     return [kept[k] for k in sorted(kept, key=int)], run.get("notes_total", len(kept))
+
+
+def failure(row):
+    """Why a row's last repetition failed, from the app's error code."""
+    code = int(row.get("last_err", 0) or 0)
+    if code in APP_ERRORS:
+        return APP_ERRORS[code]
+    if code & 0xFF00 == 0x8100:
+        return "NIO " + NIO_ERRORS.get(code & 0xFF, f"error {code & 0xFF}")
+    return f"error 0x{code:04x}" if code else "?"
+
+
+def up_kbs(row):
+    """An upload's rate: its body over the time from the open returning to the reply's status. That is the
+    writes, then the wait, which is when NIOs that hold the body until the commit (curl) send it."""
+    us = row.get("us_write", 0) + row.get("us_ready", 0)
+    return row.get("bytes", 0) * 1e6 / us / 1024 if us else 0.0
+
+
+def extras(runs, tests):
+    """Those of tests (REDIRECT_TESTS or UPLOAD_TESTS) that any of the runs has."""
+    return [t for t in tests if any(t in r["rows"] for r in runs)]
+
+
+def extra_cell(run, test):
+    """A redirect or upload test's result, as text: the time, and per redirect hop (against the same request
+    without it) or the rates."""
+    row = run["rows"].get(test)
+    if not row:
+        return "-"
+    if not good(row):
+        return "failed: " + failure(row)
+    t = ms(row["us_total"])
+    if test == "keep302":
+        return f"{t}, 302 kept"
+    if test in HOPS:
+        base = run["rows"].get("post1k" if test == "post307" else "get1k")
+        if good(base):
+            per = (row["us_total"] - base["us_total"]) / HOPS[test]
+            return f"{t} ({'+' if per >= 0 else '-'}{ms(abs(per))}/hop)"
+        return t
+    if test == "echo4k":
+        return f"{t}, up {up_kbs(row):.1f} down {kbs(row):.1f} KB/s"
+    return f"{t}, {up_kbs(row):.1f} KB/s up"
+
+
+def server_view(log, run):
+    """Per test, what the server saw of the run's requests, from its log: redirects followed per repetition,
+    whether the final request came, how a body came (length or chunked), how long it took to arrive, and
+    what the server's check found."""
+    seen = {}
+    for e in log:
+        if e.get("stack") != run["stack"] or e.get("run") != run["id"] or not e.get("test") or \
+                not e.get("path", "").startswith(TEST_PATHS):
+            continue
+        v = seen.setdefault(e["test"], {"reps": set(), "hops": 0, "final": 0, "enc": set(), "recv": [],
+                                        "results": []})
+        v["reps"].add(e.get("rep", ""))
+        if e.get("path", "").startswith("/h2h/redirect/"):
+            v["hops"] += 1
+            continue
+        v["final"] += 1
+        if e.get("encoding") in ("length", "chunked", "broken"):
+            v["enc"].add(e["encoding"])
+            if e.get("ms_recv"):
+                v["recv"].append(float(e["ms_recv"]))
+        if e.get("result"):
+            v["results"].append(e["result"])
+    out = {}
+    for test, v in seen.items():
+        reps, parts = max(len(v["reps"]), 1), []
+        if test in HOPS:
+            hops = round(v["hops"] / reps, 1)
+            parts.append(f"{hops:g} hop{'' if hops == 1 else 's'}" + (" + target" if v["final"] else ", not followed"))
+        if v["enc"]:
+            parts.append("/".join(sorted(v["enc"])))
+        if v["recv"]:
+            parts.append(ms(1000 * sum(v["recv"]) / len(v["recv"])))
+        if v["results"]:
+            bad = [r for r in v["results"] if r != "ok"]
+            parts.append("ok" if not bad else bad[0].split(":")[0] + (f" ({len(bad)}x)" if len(bad) > 1 else ""))
+        out[test] = ", ".join(parts)
+    return out
 
 
 def text_report(runs, log, version=""):
@@ -491,6 +866,17 @@ def text_report(runs, log, version=""):
         t = next((t for t in gets(r) if r["rows"].get(t) is row), None)
         cells.append(f"{s[t]:.1f} ms" if t in s else "-")
     lines.append("server send".ljust(w) + "".join(c.ljust(26) for c in cells))
+    views = [server_view(log, r) for r in runs]
+    for title, tests in (("REDIRECTS (total time; the cost of each hop, against get1k or post1k)", REDIRECT_TESTS),
+                         ("UPLOADS (total time; the body over writes and the wait for the reply)", UPLOAD_TESTS)):
+        tests = extras(runs, tests)
+        if not tests:
+            continue
+        lines += ["", title, head]
+        for t in tests:
+            lines.append(t.ljust(w) + "".join(extra_cell(r, t)[:25].ljust(26) for r in runs))
+            if any(t in v for v in views):
+                lines.append("  server saw".ljust(w) + "".join(v.get(t, "-")[:25].ljust(26) for v in views))
     lines += ["", "READ SIZE SWEEP (16 KB body, KB/s)", head]
     sizes = sorted({int(t[2:]) for r in runs for t in sweeps(r)})
     for n in sizes:
@@ -657,6 +1043,29 @@ def html_report(runs, log, version=""):
                      f"wire {row.get('bytes_in', 0)} in",
                      f"{srv[r['key']][t]:.1f} ms" if t in srv[r["key"]] else "-"])
     out.append(table(["Run", "Split", "send / wait / recv / palm", "Exchanges", "Reads", "Server send"], rows))
+
+    redirects, uploads = extras(runs, REDIRECT_TESTS), extras(runs, UPLOAD_TESTS)
+    if redirects or uploads:
+        out.append("<h2>Redirects and uploads</h2><p class=note>"
+                   "<b>redir1</b>: one 302 with no body to a 1 KB body; <b>redir3</b>: 301, 307 and 308, each with a "
+                   "short page as most servers send, to the same; both asked to follow, and checked byte for byte. "
+                   "The time per hop is against <b>get1k</b>. <b>keep302</b>: the same redirect not asked to "
+                   "follow, which must come back as a 302. <b>post307</b>: a 1 KB POST redirected by a 307, which "
+                   "has the body sent again (per hop against <b>post1k</b>). Uploads go to the server's sink, "
+                   "which checks every byte: the rate is the body over the writes and the wait for the reply. "
+                   "<b>echo4k</b> sends 4 KB that come back to be checked. Under each: what the server saw.</p>")
+        views = {r["key"]: server_view(log, r) for r in runs}
+        rows = []
+        for t in redirects + uploads:
+            cells = [e(t)]
+            for r in runs:
+                text = extra_cell(r, t)
+                cell = f"<span class=fail>{e(text)}</span>" if text.startswith("failed") else e(text)
+                if t in views[r["key"]]:
+                    cell += f"<br><small>{e(views[r['key']][t])}</small>"
+                cells.append(cell)
+            rows.append(cells)
+        out.append(table(head, rows))
 
     sizes = sorted({int(t[2:]) for r in runs for t in sweeps(r)})
     if sizes:
@@ -919,7 +1328,9 @@ def index_page(version="", runs=None):
     out = ["<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
            "<title>h2h</title><style>" + CSS + "</style><main>"
            "<h1>h2h server</h1><p class=note>Version <code>" + e(version or server_version()) +
-           "</code></p><p>Targets: <code>/h2h/bytes/N</code>. Results: "
+           "</code></p><p>Targets: <code>/h2h/bytes/N</code>, <code>/h2h/redirect/HOPS/bytes/N</code> "
+           "(HOPS like <code>302</code> or <code>301a-307-308e</code>), and POST or PUT to <code>/h2h/sink/N</code> "
+           "or <code>/h2h/echo</code>. Results: "
            "<a href='/h2h/report'>report</a>, <a href='/h2h/report.txt'>report.txt</a>, "
            "<a href='/h2h/runs.json'>runs.json</a>, <a href='/h2h/log.csv'>log.csv</a>.</p>"]
     runs = sorted((runs or {}).values(), key=lambda r: r["received"], reverse=True)

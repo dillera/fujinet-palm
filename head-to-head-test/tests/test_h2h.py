@@ -1,8 +1,11 @@
 """Host tests: the server on its own, and palm/suite.c built for this machine
 (tests/host) run against it end to end, upload and reports included."""
+import csv
+import http.client
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -38,6 +41,33 @@ class Server:
     def stop(self):
         self.httpd.shutdown()
         self.httpd.server_close()
+
+    def request(self, method, path, body=None, headers=None, chunked=False):
+        """One request with http.client, which follows no redirect: status, headers (lower-case names), body."""
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        headers = dict(headers or {})
+        if chunked:
+            headers["Transfer-Encoding"] = "chunked"
+            body = iter([body[i:i + 1000] for i in range(0, len(body), 1000)])
+        c.request(method, path, body=body, headers=headers, encode_chunked=chunked)
+        r = c.getresponse()
+        data = r.read()
+        c.close()
+        return r.status, {k.lower(): v for k, v in r.getheaders()}, data
+
+    def raw(self, data):
+        """Bytes straight onto a connection, and everything that comes back."""
+        with socket.create_connection(("127.0.0.1", self.port), timeout=10) as s:
+            s.sendall(data)
+            out = b""
+            while True:
+                piece = s.recv(65536)
+                if not piece:
+                    return out
+                out += piece
+
+    def log(self):
+        return h2h_server.read_log(h2h_server.Handler.store.log_path)
 
 
 class PatternAndStore(unittest.TestCase):
@@ -75,6 +105,163 @@ class PatternAndStore(unittest.TestCase):
             self.assertNotIn("palm              5", text)
             page = h2h_server.html_report(list(runs.values()), [])
             self.assertIn("not split: the exchanges run inside the library", page)
+
+
+    def test_pattern_pieces_match_the_whole(self):
+        # The sink and echo check bodies piece by piece with pattern_at, across 64 KB boundaries too.
+        whole = bytes((i ^ (i >> 8)) & 0xFF for i in range(140000))
+        self.assertEqual(h2h_server.pattern(140000), whole)
+        for start, n in ((0, 1), (255, 2), (65530, 100), (65536, 65536), (131000, 9000)):
+            self.assertEqual(h2h_server.pattern_at(start, n), whole[start:start + n], (start, n))
+
+    def test_old_request_log_gets_the_new_columns(self):
+        # An older server's log keeps its rows under the new header; one with columns this server does not know
+        # is moved aside rather than mixed.
+        with tempfile.TemporaryDirectory() as d:
+            old = ["time", "client", "path", "stack", "run", "test", "rep", "bytes", "ms_request", "ms_send",
+                   "status"]
+            with open(os.path.join(d, "requests.csv"), "w", newline="") as f:
+                w = csv.writer(f)
+                w.writerow(old)
+                w.writerow(["t0", "1.2.3.4", "/h2h/bytes/16", "nio-serial", "7", "get16", "0", "16", "0.1",
+                            "0.0", "200"])
+            store = h2h_server.Store(d)
+            store.log({"path": "/h2h/sink/16", "method": "POST", "bytes_in": 16, "encoding": "chunked",
+                       "result": "ok", "status": 200})
+            rows = h2h_server.read_log(store.log_path)
+            self.assertEqual(list(rows[0]), h2h_server.LOG_COLUMNS)
+            self.assertEqual((rows[0]["test"], rows[0]["status"], rows[0]["encoding"]), ("get16", "200", ""))
+            self.assertEqual((rows[1]["method"], rows[1]["encoding"], rows[1]["result"]), ("POST", "chunked", "ok"))
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "requests.csv"), "w") as f:
+                f.write("time,elsewhere\nt0,x\n")
+            h2h_server.Store(d)
+            self.assertFalse(os.path.exists(os.path.join(d, "requests.csv")))
+            (moved,) = [n for n in os.listdir(d) if n.startswith("requests-")]
+            with open(os.path.join(d, moved)) as f:
+                self.assertEqual(f.read(), "time,elsewhere\nt0,x\n")
+
+    def test_failures_are_named(self):
+        self.assertEqual(h2h_server.failure({"last_err": 0x8046}), "redirect not followed")
+        self.assertEqual(h2h_server.failure({"last_err": 0x8102}), "NIO invalid")
+        self.assertEqual(h2h_server.failure({"last_err": 0x8148}), "NIO error 72")
+        self.assertEqual(h2h_server.failure({"last_err": 0x1234}), "error 0x1234")
+
+
+class Uploads(unittest.TestCase):
+    """POST and PUT to /sink/N and /echo, with every body framing NIO uses."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.server = Server(self.tmp)
+
+    def tearDown(self):
+        self.server.stop()
+        shutil.rmtree(self.tmp)
+
+    def test_sink_checks_every_byte(self):
+        body = h2h_server.pattern(16384)
+        for method, chunked in (("POST", False), ("POST", True), ("PUT", False), ("PUT", True)):
+            status, _, reply = self.server.request(method, "/h2h/sink/16384?r=5&t=post16k&k=0&s=host", body,
+                                                   chunked=chunked)
+            self.assertEqual((status, reply), (200, b"ok 16384\n"), (method, chunked))
+        bad = bytearray(body[:1024])
+        bad[700] ^= 0xFF
+        for sent, want in ((body[:1000], b"short: 1000 of 1024\n"), (body[:1100], b"long: 1100 of 1024\n"),
+                           (bytes(bad), b"bad at 700: got 0x%02x want 0x%02x\n" % (bad[700], body[700])),
+                           (b"", b"short: 0 of 1024\n")):
+            status, _, reply = self.server.request("POST", "/h2h/sink/1024", sent)
+            self.assertEqual((status, reply), (422, want))
+        self.assertEqual(self.server.request("POST", "/h2h/sink/99999999", b"x")[0], 400)
+        self.assertEqual(self.server.request("GET", "/h2h/sink/16")[0], 405)
+        log = self.server.log()
+        firsts = [(e["method"], e["encoding"], e["bytes_in"], e["result"]) for e in log[:4]]
+        self.assertEqual(firsts, [("POST", "length", "16384", "ok"), ("POST", "chunked", "16384", "ok"),
+                                  ("PUT", "length", "16384", "ok"), ("PUT", "chunked", "16384", "ok")])
+        self.assertEqual((log[0]["stack"], log[0]["run"], log[0]["test"], log[0]["rep"]), ("host", "5", "post16k", "0"))
+
+    def test_echo_sends_the_body_back(self):
+        body = h2h_server.pattern(4096)
+        status, headers, reply = self.server.request("POST", "/h2h/echo", body, chunked=True)
+        self.assertEqual((status, reply, headers["x-h2h-check"]), (200, body, "ok"))
+        self.assertEqual(headers["content-type"], "application/octet-stream")
+        self.assertEqual(headers["x-content-type-options"], "nosniff")
+        status, headers, reply = self.server.request("PUT", "/h2h/echo", b"\x00\x02")
+        self.assertEqual((status, reply, headers["x-h2h-check"]), (200, b"\x00\x02", "bad at 1: got 0x02 want 0x01"))
+        status, _, _ = self.server.request("POST", "/h2h/echo", None,
+                                           headers={"Content-Length": str(h2h_server.ECHO_MAX + 1)})
+        self.assertEqual(status, 413)
+
+    def test_broken_bodies_are_refused(self):
+        head = b"POST /h2h/sink/4 HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n"
+        for body in (b"zz\r\n\x00\x01\r\n0\r\n\r\n", b"4\r\n\x00\x01\x02\x03XX0\r\n\r\n"):
+            reply = self.server.raw(head + body)
+            self.assertTrue(reply.startswith(b"HTTP/1.1 400 "), reply)
+        reply = self.server.raw(b"POST /h2h/sink/4 HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: gzip\r\n\r\n")
+        self.assertTrue(reply.startswith(b"HTTP/1.1 501 "), reply)
+        # A trailer field after the last chunk is read and ignored.
+        reply = self.server.raw(head + b"4\r\n\x00\x01\x02\x03\r\n0\r\nX-T: 1\r\n\r\n")
+        self.assertTrue(reply.startswith(b"HTTP/1.1 200 ") and reply.endswith(b"ok 4\n"), reply)
+
+
+class Redirects(unittest.TestCase):
+    """/redirect/HOPS/WHERE, one hop at a time as a client that follows them sees it."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.server = Server(self.tmp)
+
+    def tearDown(self):
+        self.server.stop()
+        shutil.rmtree(self.tmp)
+
+    def test_a_chain_ends_at_the_target(self):
+        path, seen = "/h2h/redirect/301a-307-308ae/bytes/1024?r=3&t=redir3&k=1&s=host", []
+        for _ in range(5):
+            status, headers, body = self.server.request("GET", path)
+            if status == 200:
+                break
+            seen.append((status, headers["location"], len(body) > 0))
+            path = headers["location"].replace(f"http://127.0.0.1:{self.server.port}", "")
+        self.assertEqual(body, h2h_server.pattern(1024))
+        base = f"http://127.0.0.1:{self.server.port}"
+        q = "?r=3&t=redir3&k=1&s=host"
+        self.assertEqual(seen, [(301, f"{base}/h2h/redirect/307-308ae/bytes/1024{q}", True),
+                                (307, f"/h2h/redirect/308ae/bytes/1024{q}", True),
+                                (308, f"{base}/h2h/bytes/1024{q}", False)])
+        log = [e for e in self.server.log() if e["test"] == "redir3"]
+        self.assertEqual([e["status"] for e in log], ["301", "307", "308", "200"])
+        self.assertTrue(all(e["rep"] == "1" for e in log))
+        self.assertEqual(log[0]["result"], f"-> {base}/h2h/redirect/307-308ae/bytes/1024{q}")
+
+    def test_a_page_says_where_it_went(self):
+        status, headers, body = self.server.request("GET", "/h2h/redirect/302/echo")
+        self.assertEqual((status, headers["location"]), (302, "/h2h/echo"))
+        self.assertIn(b"<h1>302 Found</h1>", body)
+        self.assertIn(b'<a href="/h2h/echo">', body)
+        self.assertEqual(headers["content-type"], "text/html; charset=utf-8")
+
+    def test_a_post_is_read_then_sent_again(self):
+        body = h2h_server.pattern(1024)
+        status, headers, _ = self.server.request("POST", "/h2h/redirect/307/sink/1024?t=post307", body)
+        self.assertEqual((status, headers["location"]), (307, "/h2h/sink/1024?t=post307"))
+        status, _, reply = self.server.request("POST", headers["location"], body)
+        self.assertEqual((status, reply), (200, b"ok 1024\n"))
+        hop = self.server.log()[0]
+        self.assertEqual((hop["method"], hop["bytes_in"], hop["encoding"]), ("POST", "1024", "length"))
+
+    def test_bad_chains_are_refused(self):
+        for path in ("/h2h/redirect/304/bytes/1", "/h2h/redirect/302x/bytes/1", "/h2h/redirect//bytes/1",
+                     "/h2h/redirect/302/report", "/h2h/redirect/" + "-".join(["302"] * 11) + "/bytes/1",
+                     "/h2h/redirect/302/bytes/x"):
+            self.assertEqual(self.server.request("GET", path)[0], 400, path)
+
+    def test_location_without_a_usable_host(self):
+        # No port in Host: this server's is added. No usable Host: the address the client reached.
+        reply = self.server.raw(b"GET /h2h/redirect/302a/bytes/1 HTTP/1.1\r\nHost: example.org\r\n\r\n")
+        self.assertIn(f"Location: http://example.org:{self.server.port}/h2h/bytes/1\r\n".encode(), reply)
+        reply = self.server.raw(b"GET /h2h/redirect/302a/bytes/1 HTTP/1.1\r\nHost: a b\r\n\r\n")
+        self.assertIn(f"Location: http://127.0.0.1:{self.server.port}/h2h/bytes/1\r\n".encode(), reply)
 
 
 class Testers(unittest.TestCase):
@@ -196,17 +383,75 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(sweep, [64, 128, 256, 512, 1024, 2048, 4096, 8192])
         self.assertEqual(run["meta"]["fw"], "host")
         self.assertEqual(run["meta"]["def"], "1024")
+        # The redirect and upload tests: every one passed, uploads counted by what they sent.
+        extras = {"redir1": 1024, "redir3": 1024, "keep302": None, "post1k": 1024, "put1k": 1024,
+                  "post16k": 16384, "post64k": 65536, "echo4k": 4096, "post307": 1024}
+        for test, size in extras.items():
+            row = run["rows"][test]
+            self.assertEqual((row["reps"], row["fails"]), (2, 0), test)
+            if size:
+                self.assertEqual(row["bytes"], size, test)
+            self.assertEqual(len(row), len(h2h_server.FIELDS), test)
+        self.assertEqual(run["rows"]["post64k"]["writes"], 65)     # 64 writes of 1024, then the commit
+        self.assertEqual(run["rows"]["get1k"]["writes"], 0)
+        self.assertIn("-- Redirects and uploads --", p.stdout)
+        self.assertIn("keep302", p.stdout)
         # Every bytes request is in the log with its labels.
         log = h2h_server.read_log(os.path.join(self.data, "requests.csv"))
-        mine = [e for e in log if e["run"] == run["id"] and e["path"].startswith("/h2h/bytes/")]
+        mine = [e for e in log if e["run"] == run["id"] and e["path"].startswith("/h2h/bytes/")
+                and e["test"][:2] in ("ge", "sw")]
         self.assertEqual(len(mine), 2 * 5 + 2 * 8)
+        # The host link sends bodies chunked unless told otherwise; the 307 has it sent again with its length.
+        sinks = {(e["test"], e["encoding"]) for e in log if e["run"] == run["id"] and e["path"].startswith("/h2h/sink/")}
+        self.assertEqual(sinks, {("post1k", "chunked"), ("put1k", "chunked"), ("post16k", "chunked"),
+                                 ("post64k", "chunked"), ("post307", "length")})
         text = h2h_server.text_report(h2h_server.pick_runs(runs, ""), log)
         self.assertIn("get64k", text)
+        self.assertIn("3 hops + target", text)
+        self.assertIn("1 hop, not followed", text)
+        self.assertIn("chunked", text)
         page = h2h_server.html_report(h2h_server.pick_runs(runs, run["id"]), log)
         self.assertIn("Read size sweep", page)
         self.assertIn("<svg", page)
         self.assertIn("id=sweep-data", page)
         self.assertIn("class=bigger", page)
+        self.assertIn("<h2>Redirects and uploads</h2>", page)
+        self.assertIn("KB/s up", page)
+
+    def test_bodies_with_a_length(self):
+        # As NIO's curl build sends them: the whole body at the commit, with its length.
+        p = subprocess.run([self.exe, self.target, "1", "--no-upload"], capture_output=True, text=True, timeout=120,
+                           env=dict(os.environ, H2H_HOST_BODY="length"))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("Tests with failures: 0", p.stdout)
+        log = h2h_server.read_log(os.path.join(self.data, "requests.csv"))
+        last = [e for e in log if e["path"].startswith("/h2h/sink/") or e["path"] == "/h2h/echo"][-6:]
+        self.assertEqual({e["encoding"] for e in last}, {"length"})
+        self.assertEqual({e["result"] for e in last}, {"ok"})
+
+    def test_an_older_server_has_none_of_them(self):
+        # A server from before the redirect and upload tests answers 404: each says so instead of failing oddly.
+        saved = h2h_server.Handler._redirect, h2h_server.Handler._sink, h2h_server.Handler._echo
+        h2h_server.Handler._redirect = lambda self, rest: self._send(404, b"not found\n", info=self._drain())
+        h2h_server.Handler._sink = lambda self, size: self._send(404, b"not found\n", info=self._drain())
+        h2h_server.Handler._echo = lambda self: self._send(404, b"not found\n", info=self._drain())
+        try:
+            p = subprocess.run([self.exe, self.target, "1", "--no-upload"], capture_output=True, text=True,
+                               timeout=120)
+        finally:
+            h2h_server.Handler._redirect, h2h_server.Handler._sink, h2h_server.Handler._echo = saved
+        for test in ("redir1", "keep302", "post1k", "echo4k", "post307"):
+            self.assertIn(f"{test} failed: not on server", p.stdout)
+        self.assertIn("Tests with failures: 9", p.stdout)     # all of them: the host run has 64K on
+
+    def test_a_redirect_not_followed_is_named(self):
+        # A link that hands back a redirect it was asked to follow, as NioLib's Network transport does.
+        p = subprocess.run([self.exe, self.target, "1", "--no-upload"], capture_output=True, text=True,
+                           timeout=120, env=dict(os.environ, H2H_HOST_NOFOLLOW="1"))
+        self.assertIn("redir1 failed: not followed", p.stdout)
+        self.assertIn("redir3 failed: not followed", p.stdout)
+        self.assertIn("post307 failed: not followed", p.stdout)
+        self.assertIn("Tests with failures: 3", p.stdout)
 
     def test_flaky_link_notes_and_retries(self):
         # Every 7th ping and open fails: the run notes each, and Send's

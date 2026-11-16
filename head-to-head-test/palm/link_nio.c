@@ -4,7 +4,10 @@
  * (probe_serial.c or probe_sb.c) does the counting in gLink.
  *
  * HTTP on NIO is fn_open, then fn_info until the status line is in, then
- * fn_read until FN_READ_EOF: one exchange per piece. */
+ * fn_read until FN_READ_EOF: one exchange per piece. An upload opens with
+ * FN_OPEN_BODY_UNKNOWN, fn_writes the body in order and commits it with a
+ * write of nothing before the fn_info; FN_OPEN_FOLLOW_REDIR asks NIO to
+ * follow redirects. */
 #include <PalmOS.h>
 
 #include "fujinet-nio.h"
@@ -23,7 +26,8 @@
 
 static fn_handle_t gHandle;
 static Boolean gHandleOpen;
-static UInt32 gOffset;
+static UInt32 gOffset;      /* the next read's offset */
+static UInt32 gWritten;     /* the next write's */
 
 #if defined(H2H_HOST_STACK)
 /* Built into another app (NIO Config's H2H page), which names the stack from
@@ -197,13 +201,56 @@ Err link_ping(void)
     return Check("ping", fn_clock_get(&t));
 }
 
-Err link_get_open(const Char *url)
+/* H2H_GET, _POST and _PUT are NIO's own method numbers. */
+Err link_open(UInt8 method, const Char *url, UInt8 flags)
 {
-    uint8_t r = fn_open(&gHandle, FN_METHOD_GET, url, 0);
+    uint8_t f = 0, r;
 
-    gOffset = 0;
+    if (flags & H2H_FOLLOW)
+        f |= FN_OPEN_FOLLOW_REDIR;
+    if (flags & H2H_BODY)
+        f |= FN_OPEN_BODY_UNKNOWN;
+    r = fn_open(&gHandle, method, url, f);
+    gOffset = gWritten = 0;
     gHandleOpen = r == FN_OK;
     return Check("open", r);
+}
+
+Err link_get_open(const Char *url)
+{
+    return link_open(H2H_GET, url, 0);
+}
+
+/* The body's next piece, at the offset the last one ended at; fn_write
+ * splits what one packet cannot carry. */
+Err link_write(const UInt8 *buf, UInt16 len)
+{
+    Char call[20];
+    uint16_t n;
+    uint8_t r = FN_OK;
+
+    while (len && r == FN_OK) {
+        n = 0;
+        r = fn_write(gHandle, gWritten, buf, len, &n);
+        if (r == FN_OK && n == 0)
+            r = FN_ERR_IO;
+        gWritten += n;
+        buf += n;
+        len -= n;
+    }
+    if (r == FN_OK)
+        return errNone;
+    StrPrintF(call, "write@%lu", gWritten);
+    return Check(call, r);
+}
+
+/* The end of a body of unknown length: a write of nothing. */
+Err link_commit(void)
+{
+    static UInt8 none;
+    uint16_t n = 0;
+
+    return Check("commit", fn_write(gHandle, gWritten, &none, 0, &n));
 }
 
 Err link_get_wait(UInt16 *httpStatus)
