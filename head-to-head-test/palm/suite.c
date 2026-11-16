@@ -900,6 +900,54 @@ static void ReportExtras(Out *o)
     }
 }
 
+/* This app's own build: "<commit> <MM-DD HH:MMZ>", from the make that built it (palm/Makefile). */
+void suite_app_build(Char *out, UInt16 size)
+{
+    StrNCopy(out, H2H_COMMIT " " H2H_BUILT, size - 1);
+    out[size - 1] = '\0';
+}
+
+/* The installed NioLib's build, read from its 'tver' resource 1 ("<commit> <date> <time>Z", written by
+ * fujinet-nio-lib's palmos-shared.mk): "NioLib c1969bc 2026-11-16 15:02Z". out needs 64 bytes. */
+void suite_niolib_build(Char *out, UInt16 size)
+{
+    const Char *msg = "NioLib: not installed";
+#ifndef HOST_PALMOS_H
+    DmSearchStateType state;
+    UInt16 card = 0, n;
+    LocalID id = 0;
+    DmOpenRef db;
+    MemHandle h;
+    Char text[40];
+
+    text[0] = '\0';
+    if (DmGetNextDatabaseByTypeCreator(true, &state, sysFileTLibrary, 0x4E694C31UL /* NiL1 */, false,
+                                       &card, &id) == errNone && id) {
+        msg = "NioLib: older build, no build info";
+        if ((db = DmOpenDatabase(card, id, dmModeReadOnly)) != NULL) {
+            if ((h = DmGet1Resource(0x74766572UL /* tver */, 1)) != NULL) {
+                n = (UInt16)MemHandleSize(h);
+                if (n > sizeof(text) - 1)
+                    n = sizeof(text) - 1;
+                MemMove(text, MemHandleLock(h), n);
+                text[n] = '\0';
+                MemHandleUnlock(h);
+                DmReleaseResource(h);
+            }
+            DmCloseDatabase(db);
+        }
+    }
+    if (text[0]) {
+        StrNCopy(out, "NioLib ", size - 1);
+        out[size - 1] = '\0';
+        StrNCat(out, text, size - 8);
+        return;
+    }
+#endif
+    StrNCopy(out, msg, size - 1);
+    out[size - 1] = '\0';
+}
+
 UInt16 suite_report(Char *buf, UInt16 size)
 {
     Out o;
@@ -916,6 +964,11 @@ UInt16 suite_report(Char *buf, UInt16 size)
     StrPrintF(line, "%s  run %u", link_stack(), gResults.runId);
     PutLine(&o, line);
     PutLine(&o, link_title());
+    Put(&o, "app ");
+    suite_app_build(line, sizeof(line));
+    PutLine(&o, line);
+    suite_niolib_build(line, sizeof(line));
+    PutLine(&o, line);
     Put(&o, "FW ");
     PutLine(&o, gResults.firmware[0] ? gResults.firmware : "?");
     StrPrintF(line, "%s  %s", gResults.device, clk_describe());

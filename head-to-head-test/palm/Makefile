@@ -17,6 +17,10 @@ NIO_LIB ?= /repos/fujinet-nio-lib
 SBNIO_INC ?= /repos/fujinet-nio/bridges/rp2350-springboard/include
 CLASSIC ?= /classic/common
 H2H_TARGET ?= http://fujinet.online:8199/h2h
+# The app's own build, shown on its first line and in its report: commit7[-dirty] and "MM-DD HH:MMZ" (UTC). The
+# top-level Makefile computes them on the Mac (git does not work in the container) and passes them here.
+H2H_COMMIT ?= unknown
+H2H_BUILT ?= unknown
 B = build
 OUT = $(abspath $(B))
 
@@ -30,7 +34,8 @@ RX_SERIAL = 6144
 CHUNK_SERIAL = 490
 CHUNK_SB = 1002
 
-CFLAGS = -O2 -Wall -palmos$(SDK) -I. '-DH2H_DEFAULT_TARGET="$(H2H_TARGET)"'
+CFLAGS = -O2 -Wall -palmos$(SDK) -I. '-DH2H_DEFAULT_TARGET="$(H2H_TARGET)"' \
+         '-DH2H_COMMIT="$(H2H_COMMIT)"' '-DH2H_BUILT="$(H2H_BUILT)"'
 APP_SRC = h2h_main.c suite.c clock.c
 NIO_INC = -I$(NIO_LIB)/include -I$(NIO_LIB)/include/palmos
 

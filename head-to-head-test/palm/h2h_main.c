@@ -61,15 +61,52 @@ static void DrawLog(void)
         WinDrawChars(gLog[i], StrLen(gLog[i]), 2, LOG_TOP + i * LOG_HEIGHT);
 }
 
+/* The first line: the link's title in bold, then this build's commit and time in the standard font. A long
+ * title is shortened until the whole line fits the 160-pixel screen (link_title() itself stays as it is: the
+ * report and the upload use it). */
+static void HeaderTitles(const Char *t, const Char *out[3])
+{
+    out[0] = t;
+    if (StrNCompare(t, "NioLib SB", 9) == 0) {
+        Boolean rom = StrStr(t, "module") != NULL;
+        out[1] = rom ? "NioLib SB ROM" : "NioLib SB RAM";
+        out[2] = rom ? "SB ROM" : "SB RAM";
+    } else if (StrNCompare(t, "NioLib Network", 14) == 0) {
+        out[1] = "NioLib Net";
+        out[2] = "Net";
+    } else {
+        out[1] = t;
+        out[2] = t;
+    }
+}
+
 static void DrawHeader(void)
 {
     FontID old = FntSetFont(boldFont);
-    const Char *t = link_title();
+    const Char *titles[3], *t;
+    Char rest[48];
+    UInt16 i, w = 0, restW = 0;
     RectangleType r;
 
+    suite_app_build(rest + 1, sizeof(rest) - 1);
+    rest[0] = ' ';
+    HeaderTitles(link_title(), titles);
+    t = titles[2];
+    for (i = 0; i < 3; i++) {
+        FntSetFont(boldFont);
+        w = FntCharsWidth(titles[i], StrLen(titles[i]));
+        FntSetFont(stdFont);
+        restW = FntCharsWidth(rest, StrLen(rest));
+        t = titles[i];
+        if (2 + w + restW <= 160)
+            break;
+    }
     RctSetRectangle(&r, 0, 15, 160, 13);
     WinEraseRectangle(&r, 0);
+    FntSetFont(boldFont);
     WinDrawChars(t, StrLen(t), 2, 16);
+    FntSetFont(stdFont);
+    WinDrawChars(rest, StrLen(rest), 2 + w, 16);
     FntSetFont(old);
 }
 
@@ -516,6 +553,9 @@ static Boolean MainHandleEvent(EventType *e)
         gLogVisible = true;
         DrawHeader();
         if (gLogCount == 0) {
+            Char nl[64];
+            suite_niolib_build(nl, sizeof(nl));
+            ui_progress(nl);
             ui_progress("Check the target and your name,");
             ui_progress("then tap Run.");
             ui_progress(gHaveResults ? "Results: the last run." : "");

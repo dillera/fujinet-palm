@@ -27,19 +27,25 @@ H2H_HOST ?= $(shell ipconfig getifaddr en1 2>/dev/null || ipconfig getifaddr en0
 H2H_TARGET ?= http://fujinet.online:8199/h2h
 DOCKER = docker run --rm --platform linux/amd64 -v $(CURDIR):/h2h -v $(REPOS):/repos \
          -v $(CLASSIC):/classic -w /h2h/palm $(IMAGE)
+# The build shown on each app's first line and in its report, computed here (git does not work in the container).
+H2H_COMMIT ?= $(shell git describe --always --dirty --abbrev=7 2>/dev/null || echo unknown)
+H2H_BUILT ?= $(shell date -u '+%m-%d %H:%MZ')
+H2H_BUILD_ARGS = H2H_COMMIT='$(H2H_COMMIT)' H2H_BUILT='$(H2H_BUILT)'
 PRCS = palm/build/FN_H2H.prc palm/build/H2H.prc palm/build/H2H_SB.prc palm/build/H2H_RAM.prc \
        palm/build/H2H_NL.prc
 NIOLIB = $(REPOS)/fujinet-nio-lib/build/palmos-shared-3.5
 
 all: palm/icon.bmp niolib
-	$(DOCKER) make H2H_TARGET='$(H2H_TARGET)'
+	$(DOCKER) make H2H_TARGET='$(H2H_TARGET)' $(H2H_BUILD_ARGS)
 	@ls -l $(PRCS)
 
 # NioLib (fujinet-nio-lib's palmos-shared target) for Palm OS 3.5, in the
 # palmdev-py image, without the USB transport (no Handspring SDK here).
 niolib:
 	docker run --rm --platform linux/amd64 -v $(REPOS):/repos -w /repos/fujinet-nio-lib palmdev-py \
-	  make -s palmos-shared PALMOS_SDK_VERSION=3.5 >/dev/null
+	  make -s palmos-shared PALMOS_SDK_VERSION=3.5 \
+	  NIOLIB_COMMIT=$$(git -C $(REPOS)/fujinet-nio-lib rev-parse --short=7 HEAD) \
+	  NIOLIB_BUILT="$$(date -u '+%Y-%m-%d %H:%M')" >/dev/null
 
 palm/icon.bmp: tools/make_icon.py
 	python3 tools/make_icon.py $@

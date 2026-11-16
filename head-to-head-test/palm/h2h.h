@@ -12,6 +12,13 @@
 
 #include <PalmOS.h>
 
+#ifndef H2H_COMMIT
+#define H2H_COMMIT "unknown"
+#endif
+#ifndef H2H_BUILT
+#define H2H_BUILT "unknown"
+#endif
+
 /* ---------------------------------------------------------------- clock.c */
 
 /* Microseconds since clk_start(), from the Dragonball's system timer when it
@@ -175,6 +182,11 @@ Boolean ui_stop_requested(void);
 void suite_run(const Settings *settings, Boolean pingOnly);
 /* The report as text into buf (NUL-terminated); returns its length. */
 UInt16 suite_report(Char *buf, UInt16 size);
+/* This app's build, "a1b2c3d 11-16 15:04Z" (H2H_COMMIT and H2H_BUILT, which palm/Makefile passes in). */
+void suite_app_build(Char *out, UInt16 size);
+/* The installed NioLib's build from its tver resource: "NioLib c1969bc 2026-11-16 15:02Z", or "NioLib: not
+ * installed", or "NioLib: older build, no build info". out needs 64 bytes. */
+void suite_niolib_build(Char *out, UInt16 size);
 /* Sends the results to the target server, one GET per row. */
 Err suite_upload(const Settings *settings, UInt16 *sent);
 /* An error as text: the suite's own (h2hErrNoFollow...), else link_err_text's.
