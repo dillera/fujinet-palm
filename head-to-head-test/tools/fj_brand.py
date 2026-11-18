@@ -3,13 +3,16 @@
 
 Every FujiNet NIO Palm app goes out as "FJ-<short name>", so the apps on a
 Palm are easy to tell apart and to track. The name is chosen by creator code
-(the creator, type and code are untouched, so settings carry over), and set
+(type and code are untouched, and so is the creator unless --creator gives
+one, so settings carry over), and set
 both in the PRC header (the database name HotSync and the ROM use) and in
 the tAIN 1000 resource (the name the Launcher shows), which is replaced or
 added. NioLib keeps its name: it is a library, and apps find it by name.
 
     tools/fj_brand.py H2H_NL.prc out/FJ-H2H.prc           # name by creator
     tools/fj_brand.py App.prc out/App.prc --name FJ-Thing  # explicit name
+    tools/fj_brand.py NioConfig.prc out/FJ-NEOCFG.prc --creator NiCN
+        # our NIO Config fork: its own creator, so it sits beside FJ-CONFIG
     tools/fj_brand.py --list                               # the name table
 """
 import argparse
@@ -18,13 +21,14 @@ import sys
 
 # creator -> FJ name (Palm database names: at most 31 characters)
 FJ_NAMES = {
-    "NiC1": "FJ-Config",    # NIO Config (nio-config)
+    "NiC1": "FJ-CONFIG",    # NIO Config exactly as upstream (mozzwald) wrote it
+    "NiCN": "FJ-NEOCFG",    # our NIO Config fork (Network transport, colour UI, H2H page), re-creatored from NiC1
     "ANHN": "FJ-H2H",       # H2H NL, head-to-head test (fujinet-palm)
     "NiT1": "FJ-LibTest",   # NioLibTest (fujinet-nio-lib example)
     "ANTS": "FJ-Test",      # FujiNetTest ("FI Test")
     "ANBW": "FJ-Bounce",    # BounceWorld ("FI Bounce")
     "ANLB": "FJ-Lobby",     # FujiLobby ("FI Lobby")
-    "ANHS": "FJ-FujiCfg",   # FujiConfig ("FI Config"); FJ-Config is NIO Config
+    "ANHS": "FJ-FujiCfg",   # FujiConfig ("FI Config"); FJ-CONFIG is NIO Config
     "ANTH": "FJ-Holdem",    # Holdem ("FI Texas Hold'em")
     "ANFP": "FJ-Pet",       # FujiPet ("FI FujiPet")
 }
@@ -62,6 +66,7 @@ def main(argv=None):
     p.add_argument("src", nargs="?")
     p.add_argument("dst", nargs="?")
     p.add_argument("--name", help="explicit FJ- name (default: by creator)")
+    p.add_argument("--creator", help="new four-character creator code (set before the name is chosen)")
     p.add_argument("--list", action="store_true", help="print the creator -> name table")
     a = p.parse_args(argv)
     if a.list:
@@ -73,6 +78,10 @@ def main(argv=None):
     data = open(a.src, "rb").read()
     if len(data) < HEADER or data[60:64] != b"appl":
         sys.exit(f"{a.src}: not an application PRC")
+    if a.creator is not None:
+        if len(a.creator) != 4:
+            sys.exit("--creator: four characters")
+        data = data[:64] + a.creator.encode("ascii") + data[68:]
     creator = data[64:68].decode("ascii")
     name = a.name or FJ_NAMES.get(creator)
     if not name:
