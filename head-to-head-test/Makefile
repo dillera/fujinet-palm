@@ -6,6 +6,7 @@
 #   make test       host tests: the server, and the suite run on this Mac
 #   make install-iiic    queue FN H2H and H2H on the classic FujiNet (FUJINET) for HotSync
 #   make install-visor   HotSync H2H RAM (the Springboard app, for RAM) to the Visor over USB
+#   make fj-rom          the 256 KB FJ module ROM for the Visor: build/sbnio-fj.rom (see below)
 #   make dist            the testers' zip: build/h2h-testers-<commit>.zip (apps, NioLib, README.txt)
 #   make server-release  the server with its version fixed: build/h2h-server-<commit>.zip
 #
@@ -108,6 +109,32 @@ build/h2h-sb.rom: palm/build/H2H_SB.prc palm/build/H2H_NL.prc build/NioLib-rom.p
 flash-visor: build/h2h-sb.rom
 	SBNIO_ROM=$(abspath build/h2h-sb.rom) $(SBNIO)/host/flash.sh
 
+# The FJ module ROM: every FJ app plus NioLib's ROM copy, up to 256 KB
+# (springboard-nio 819dcda or later serves 256 KB on CS0). FJ_ROM_DIR holds
+# the FJ-named PRCs (tools/fj_brand.py) and NioLib-rom.prc (the rule above).
+# A ROM over 64 KB must say -chChecksum 0xFFFE: the Visor counts the card's
+# checksum bytes in 16 bits, and with a whole-ROM count it fails the check
+# and lists none of the module's apps.
+#   make fj-rom FJ_ROM_DIR=build/rom-r4b
+#   SBNIO_ROM=$(abspath build/sbnio-fj.rom) $(SBNIO)/host/flash.sh   # then reset the Visor
+FJ_ROM_DIR  ?= build/fj-rom
+FJ_ROM_NAME ?= SBNIO FJ $(H2H_COMMIT)
+FJ_ROM_DBS  ?= FJ-H2H NioLib-rom FJ-CONFIG FJ-NEOCFG FJ-Test FJ-Bounce FJ-Lobby FJ-FujiCfg \
+               FJ-Holdem FJ-Pet FJ-LibTest
+
+fj-rom: build/sbnio-fj.rom
+
+build/sbnio-fj.rom: $(FJ_ROM_DBS:%=$(FJ_ROM_DIR)/%.prc)
+	@mkdir -p build
+	rm -f $@
+	docker run --rm --platform linux/amd64 -v $(SBNIO):$(SBNIO) -v $(CURDIR):$(CURDIR) sbnio-palm \
+	  $(SBNIO)/palm/build/Palm-MakeROM -op create -hdr 0x08000000 -romBlock 0x08000000 0x40000 \
+	  -chChecksum 0xFFFE -chName "Springboard NIO" -chManuf "FujiNet" -chVersion 0x0100 \
+	  -chZCrDate -romName "$(FJ_ROM_NAME)" -autoSize -tokStr HsAT 330 \
+	  $(patsubst %,-romDB %,$(abspath $^)) -o $(abspath $@)
+	@ls -l $@
+	@test $$(wc -c < $@) -le 262144 || { echo "$@ is over the module's 256 KB" >&2; rm -f $@; exit 1; }
+
 # The testers' zip, named by this checkout's commit (-dirty with uncommitted
 # changes, which a zip for testers should not have). Its README.txt is
 # dist/README-testers.txt with the commits it was built from filled in.
@@ -136,4 +163,4 @@ clean:
 	$(DOCKER) make clean
 	rm -f palm/icon.bmp build/h2h-sb.rom
 
-.PHONY: all niolib server report test install-iiic install-visor flash-visor dist server-release clean
+.PHONY: all niolib server report test install-iiic install-visor flash-visor fj-rom dist server-release clean
